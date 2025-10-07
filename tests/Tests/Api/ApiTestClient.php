@@ -350,15 +350,15 @@ class ApiTestClient
      *  Defaults to true.
      * @param $timeOut - The HTTP request timeout setting. Defaults to 10 seconds.
      */
-    public function __construct($baseUrl, $isHttpErrorEnabled = true, $timeOut = 10)
+    public function __construct(string $baseUrl, bool $isHttpErrorEnabled = true, int $timeOut = 10)
     {
-        $clientOptions = [
+        $this->client = new Client([
             "verify" => false,
             "base_uri" => $baseUrl,
             "timeout" => $timeOut,
             "http_errors" => $isHttpErrorEnabled
-        ];
-        $this->client = new Client($clientOptions);
+        ]);
+
         $this->headers = [
             "Accept" => "application/json",
             "Content-Type" => "application/json"
