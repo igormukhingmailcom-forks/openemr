@@ -296,6 +296,11 @@ class QueryUtils
         return \sqlGetLastInsertId();
     }
 
+    public static function getAffectedRows(): int
+    {
+        return \generic_sql_affected_rows();
+    }
+
     public static function querySingleRow(string $sql, array $params)
     {
         $result = self::sqlStatementThrowException($sql, $params);
