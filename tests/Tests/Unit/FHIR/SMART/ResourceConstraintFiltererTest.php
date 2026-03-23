@@ -1,8 +1,9 @@
 <?php
+
 /*
  * ResourceConstraintFiltererTest.php
  * @package openemr
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Stephen Nielson <snielson@discoverandchange.com>
  * @copyright Copyright (c) 2025 Stephen Nielson <snielson@discoverandchange.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -56,6 +57,7 @@ class ResourceConstraintFiltererTest extends TestCase {
         }
     }
 
+    /** @codeCoverageIgnore Data providers run before coverage instrumentation starts. */
     public static function observationAccessProvider() : array {
         return [
             ['social-history', 'user/Observation.s', true, ['social-history', 'survey']],
@@ -92,6 +94,7 @@ class ResourceConstraintFiltererTest extends TestCase {
             , "Access should be " .$shouldBeClause . " for Observation with categories " . implode(',', $observationCategories));
     }
 
+    /** @codeCoverageIgnore Data providers run before coverage instrumentation starts. */
     public static function conditionAccessProvider() : array {
         return [
             ['encounter-diagnosis', 'user/Condition.s', true, 'encounter-diagnosis'],

@@ -12,6 +12,7 @@ require_once dirname(__FILE__, 6) . "/globals.php";
 
 use Juggernaut\OpenEMR\Modules\PriorAuthModule\Controller\AuthorizationService;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 
 $data = new AuthorizationService();
 $patients = $data->listPatientAuths();
@@ -25,12 +26,12 @@ $patients = $data->listPatientAuths();
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title><?php echo xlt("List Exising Prior Auths Report"); ?></title>
+    <title><?php echo xlt("List Existing Prior Auths Report"); ?></title>
     <script>
         // opens the demographic and encounter screens in a new window
         function openNewTopWindow(newpid) {
             top.restoreSession();
-            top.RTop.location = "<?php echo $GLOBALS['webroot']; ?>/interface/patient_file/summary/demographics.php?set_pid=" + encodeURIComponent(newpid);
+            top.RTop.location = "<?php echo OEGlobalsBag::getInstance()->get('webroot'); ?>/interface/patient_file/summary/demographics.php?set_pid=" + encodeURIComponent(newpid);
         }
     </script>
 </head>

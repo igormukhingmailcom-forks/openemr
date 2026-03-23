@@ -1,6 +1,6 @@
 <?php
 
-use OpenEMR\Common\Crypto\CryptoGen;
+use OpenEMR\BC\ServiceContainer;
 
 // globals that require more security
 //  The set of globals below can only be modified directly in this script (ie. can not be set while using OpenEMR) and
@@ -8,7 +8,7 @@ use OpenEMR\Common\Crypto\CryptoGen;
 //  somehow gets access to globals).
 // note that need to skip this block of code during upgrading (or else will have database issues since no keys table)
 if (empty($GLOBALS['ongoing_sql_upgrade'])) {
-    $cryptoGen = new CryptoGen();
+    $cryptoGen = ServiceContainer::getCrypto();
     // Print command for spooling to printers, used by statements.inc.php
     //   This is the command to be used for printing (without the filename).
     //   The word following "-P" should be the name of your printer.  This
@@ -20,7 +20,7 @@ if (empty($GLOBALS['ongoing_sql_upgrade'])) {
     //Enscript command used by Hylafax.
     $GLOBALS['more_secure']['hylafax_enscript'] = 'enscript -M Letter -B -e^ --margins=36:36:36:36';
     foreach ($GLOBALS['more_secure'] as $key => $value) {
-        $GLOBALS['more_secure'][$key] = $cryptoGen->encryptStandard($value);
+        $GLOBALS['more_secure'][$key] = $cryptoGen->encryptStandard(is_string($value) ? $value : null);
     }
 }
 
@@ -57,7 +57,7 @@ $GLOBALS['oer_config']['prescriptions']['shading'] = false;
 // assign 'sendfax' to turn fax sending on
 $GLOBALS['oer_config']['prescriptions']['sendfax'] = '';
 
-// asign a value here if there is any prefix needed to get dialing tone
+// assign a value here if there is any prefix needed to get dialing tone
 // you can also append a comma to add a one second delay
 // i.e. 9, will dial 9 for external tone, and wait a second.
 $GLOBALS['oer_config']['prescriptions']['prefix'] = '';

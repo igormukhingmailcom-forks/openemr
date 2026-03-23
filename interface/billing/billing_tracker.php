@@ -7,7 +7,7 @@
  * located in library/ajax/billing_tracker_ajax.php
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Ken Chapple <ken@mi-squared.com>
  * @copyright Copyright (c) 2021 Ken Chapple <ken@mi-squared.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -17,22 +17,21 @@ require_once(__DIR__ . "/../globals.php");
 require_once "$srcdir/options.inc.php";
 
 use OpenEMR\Common\{
+    Acl\AccessDeniedHelper,
     Acl\AclMain,
     Csrf\CsrfUtils,
+    Session\SessionWrapperFactory,
     Twig\TwigContainer
 };
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 
 //ensure user has proper access
 if (!AclMain::aclCheckCore('acct', 'eob', '', 'write') && !AclMain::aclCheckCore('acct', 'bill', '', 'write')) {
-    echo (
-        new TwigContainer(null, $GLOBALS['kernel']))->getTwig()->render(
-            'core/unauthorized.html.twig',
-            ['pageTitle' => xl("Billing Manager")]
-        );
-    exit;
+    AccessDeniedHelper::denyWithTemplate("ACL check failed for acct/eob or acct/bill: Billing Manager", xl("Billing Manager"));
 }
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 ?>
 <html>
 <head>
@@ -53,7 +52,7 @@ if (!AclMain::aclCheckCore('acct', 'eob', '', 'write') && !AclMain::aclCheckCore
     </style>
     <script type="text/javascript">
         $(document).ready(function() {
-            const serverUrl = "<?php echo $GLOBALS['webroot']; ?>/library/ajax/billing_tracker_ajax.php?csrf_token_form=" + <?php echo js_url(CsrfUtils::collectCsrfToken()); ?>;
+            const serverUrl = "<?php echo OEGlobalsBag::getInstance()->get('webroot'); ?>/library/ajax/billing_tracker_ajax.php?csrf_token_form=" + <?php echo js_url(CsrfUtils::collectCsrfToken(session: $session)); ?>;
             const oTable = $('#billing-tracker-table').DataTable({
                 "processing": true,
                 // next 2 lines invoke server side processing
@@ -94,10 +93,12 @@ if (!AclMain::aclCheckCore('acct', 'eob', '', 'write') && !AclMain::aclCheckCore
                         "render": function(data, type, row, meta) {
                             // Build the URL so the user can download the claim batch file
                             if (type === 'display') {
-                                const url = '<?php echo $GLOBALS['webroot']; ?>/interface/billing/get_claim_file.php?' +
-                                    'key=' + encodeURIComponent(data) +
-                                    '&csrf_token_form=' + <?php echo js_url(CsrfUtils::collectCsrfToken()); ?> +
-                                    '&partner=' + encodeURIComponent(row.x12_partner_id);
+                                const params = new URLSearchParams({
+                                    csrf_token_form: <?php echo js_escape(CsrfUtils::collectCsrfToken(session: $session)); ?>,
+                                    key: data,
+                                    partner: row.x12_partner_id
+                                });
+                                const url = '<?php echo OEGlobalsBag::getInstance()->get('webroot'); ?>/interface/billing/get_claim_file.php?' + params;
                                 data = '<a href="' + jsAttr(url) + '">' + jsText(data) + '</a>';
                             }
 

@@ -17,12 +17,15 @@
  */
 
 //hack add for command line version
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Modules\FaxSMS\Controller\AppDispatch;
 use OpenEMR\Modules\FaxSMS\Exception\EmailSendFailedException;
 use OpenEMR\Modules\FaxSMS\Exception\InvalidEmailAddressException;
 use OpenEMR\Modules\FaxSMS\Exception\SmtpNotConfiguredException;
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 $_SERVER['REQUEST_URI'] = $_SERVER['PHP_SELF'];
 $_SERVER['SERVER_NAME'] = 'localhost';
 $backpic = "";
@@ -33,7 +36,9 @@ $error = '';
 $runtime = [];
 
 // Check for other arguments and perform your script logic
-if (($argc ?? null) > 1) {
+$argc ??= 0;
+$argv ??= [];
+if ($argc > 1) {
     foreach ($argv as $k => $v) {
         if ($k == 0) {
             continue;
@@ -54,7 +59,7 @@ if (php_sapi_name() === 'cli') {
 // so service can set some settings if needed on init.
 $sessionAllowWrite = true;
 require_once(__DIR__ . "/../../../../globals.php");
-require_once($GLOBALS['srcdir'] . "/appointments.inc.php");
+require_once(OEGlobalsBag::getInstance()->get('srcdir') . "/appointments.inc.php");
 
 // Check for help argument
 if ($argc > 1 && (in_array('--help', $argv) || in_array('-h', $argv))) {
@@ -62,7 +67,7 @@ if ($argc > 1 && (in_array('--help', $argv) || in_array('-h', $argv))) {
     exit(0);
 }
 
-if (empty($runtime['site']) && empty($_SESSION['site_id']) && empty($_GET['site'])) {
+if (empty($runtime['site']) && empty($session->get('site_id')) && empty($_GET['site'])) {
     echo xlt("Missing Site Id using default") . "\n";
     $_GET['site'] = $runtime['site'] = 'default';
 } else {
@@ -81,7 +86,7 @@ if (!empty($runtime['type'])) {
 $CRON_TIME = 150;
 // use service if needed
 if ($TYPE === "SMS") {
-    $_SESSION['authUser'] = $runtime['user'] ?? $_SESSION['authUser'];
+    $session->set('authUser', $runtime['user'] ?? $session->get('authUser'));
     $clientApp = AppDispatch::getApiService('sms');
     $cred = $clientApp->getCredentials();
 
@@ -90,7 +95,7 @@ if ($TYPE === "SMS") {
     }
 }
 if ($TYPE === "EMAIL") {
-    $_SESSION['authUser'] = $runtime['user'] ?? $_SESSION['authUser'];
+    $session->set('authUser', $runtime['user'] ?? $session->get('authUser'));
     $emailApp = AppDispatch::getApiService('email');
     $cred = $emailApp->getEmailSetup();
 
@@ -189,14 +194,14 @@ $db_sms_msg['message'] = $MESSAGE;
                                 echo(nl2br($strMsg));
                                 continue;
                             } else {
-                                cron_InsertNotificationLogEntry($TYPE, $prow, $db_sms_msg);
+                                cron_InsertNotificationLogEntryFaxsms($TYPE, $prow, $db_sms_msg);
                             }
                         }
                         if (!$isValid) {
                             $strMsg .= "<strong style='color:red'>\n* " . xlt("INVALID Mobile Phone#") . text('$prow["phone_cell"]') . " " . xlt("SMS NOT SENT Patient") . ":</strong>" . text($prow['fname']) . " " . text($prow['lname']) . "</b>";
                             $db_sms_msg['message'] = xlt("Error: INVALID Mobile Phone") . '# ' . text($prow['phone_cell']) . xlt("SMS NOT SENT For") . ": " . text($prow['fname']) . " " . text($prow['lname']);
                             if ($bTestRun == 0) {
-                                cron_InsertNotificationLogEntry($TYPE, $prow, $db_sms_msg);
+                                cron_InsertNotificationLogEntryFaxsms($TYPE, $prow, $db_sms_msg);
                             }
                         } else {
                             $strMsg .= " | " . xlt("SMS SENT SUCCESSFULLY TO") . "<strong> " . text($prow['phone_cell']) . "</strong>";
@@ -218,7 +223,7 @@ $db_sms_msg['message'] = $MESSAGE;
                                     $db_sms_msg['message'],
                                 );
                                 // Success - create notification log entry
-                                cron_InsertNotificationLogEntry($TYPE, $prow, $db_sms_msg);
+                                cron_InsertNotificationLogEntryFaxsms($TYPE, $prow, $db_sms_msg);
                             } catch (InvalidEmailAddressException) {
                                 $strMsg .= formatErrorMessage(xlt("Invalid email address"));
                                 echo(nl2br($strMsg));
@@ -241,7 +246,7 @@ $db_sms_msg['message'] = $MESSAGE;
                             $strMsg .= "<strong style='color:red'>\n* " . xlt("INVALID Email") . text('$prow["email"]') . " " . xlt("EMAIL NOT SENT Patient") . ":</strong>" . text($prow['fname']) . " " . text($prow['lname']) . "</b>";
                             $db_sms_msg['message'] = xlt("Error: INVALID EMAIL") . '# ' . text($prow['email']) . xlt("EMAIL NOT SENT For") . ": " . text($prow['fname']) . " " . text($prow['lname']);
                             if ($bTestRun == 0) {
-                                cron_InsertNotificationLogEntry($TYPE, $prow, $db_sms_msg);
+                                cron_InsertNotificationLogEntryFaxsms($TYPE, $prow, $db_sms_msg);
                             }
                         } else {
                             $strMsg .= " | " . xlt("EMAILED SUCCESSFULLY TO") . "<strong> " . text($prow['email']) . "</strong>";
@@ -370,7 +375,7 @@ function formatErrorMessage(string $message): string
  * @param array  $db_sms_msg
  * @return void
  */
-function cron_InsertNotificationLogEntry($type, $prow, $db_sms_msg): void
+function cron_InsertNotificationLogEntryFaxsms($type, $prow, $db_sms_msg): void
 {
     $smsgateway_info = $type == 'SMS' ? "" : $db_sms_msg['email_sender'] . "|||" . $db_sms_msg['email_subject'];
 
@@ -407,19 +412,6 @@ function cron_SetMessage($prow, $db_sms_msg): string
     $message = text($message);
 
     return $message;
-}
-
-/**
- * Get Notification Settings
- *
- * @return array|false
- */
-function cron_GetNotificationSettings(): bool|array
-{
-    $strQuery = "SELECT * FROM notification_settings WHERE type='SMS/Email Settings'";
-    $vectNotificationSettings = sqlFetchArray(sqlStatement($strQuery));
-
-    return ($vectNotificationSettings);
 }
 
 function displayHelp(): void

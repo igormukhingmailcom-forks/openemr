@@ -3,7 +3,7 @@
  *
  * @package OpenEMR
  * @subpackage Forms
- * @link   http://www.open-emr.org
+ * @link   https://www.open-emr.org
  * @author Jacob T Paul <jacob@zhservices.com>
  * @author Vinish K <vinish@zhservices.com>
  * @author Brady Miller <brady.g.miller@gmail.com>
@@ -217,7 +217,7 @@
                 // they are clearing out the value so we are going to empty everything out.
                 codeEl.value = "";
                 codeTextEl.value = "";
-                codeContext.vlaue = "";
+                codeContext.value = "";
             }
 
         } catch (e) {

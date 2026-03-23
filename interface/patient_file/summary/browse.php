@@ -4,7 +4,7 @@
  * Patient selector for insurance gui
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @author    Tyler Wrenn <tyler@tylerwrenn.com>
  * @author    Stephen Nielson <snielson@discoverandchange.com>
@@ -19,11 +19,14 @@ require_once("$srcdir/patient.inc.php");
 require_once("$srcdir/options.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Core\Header;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Common\Uuid\UuidRegistry;
+use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 if (!empty($_POST)) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 }
@@ -45,7 +48,7 @@ $browsenum = (is_numeric($_REQUEST['browsenum'])) ? $_REQUEST['browsenum'] : 1;
                         <?php $datetimepicker_timepicker = false; ?>
                         <?php $datetimepicker_showseconds = false; ?>
                         <?php $datetimepicker_formatInput = true; ?>
-                        <?php require($GLOBALS['srcdir'] . '/js/xl/jquery-datetimepicker-2-5-4.js.php'); ?>
+                        <?php require(OEGlobalsBag::getInstance()->get('srcdir') . '/js/xl/jquery-datetimepicker-2-5-4.js.php'); ?>
                         <?php // can add any additional javascript settings to datetimepicker here; need to prepend first setting with a comma ?>
                     });
                 } else {
@@ -62,7 +65,7 @@ $browsenum = (is_numeric($_REQUEST['browsenum'])) ? $_REQUEST['browsenum'] : 1;
 <a href="javascript:window.close();"><span class="title"><?php echo xlt('Browse for Record'); ?></span><span class="back"><?php echo text($tback);?></span></a>
 
 <form border='0' method='post' name="find_patient" action="browse.php?browsenum=<?php echo attr_url($browsenum); ?>">
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 <div class="form-row">
 <div class="col-auto">
     <input type='entry' size='10' class='form-control form-control-sm' name='patient' id='searchparm' />
@@ -146,7 +149,7 @@ function auto_populate_employer_address(){
 </script>
 
 <form method="post" name="insurance_form" action="browse.php?browsenum=<?php echo attr_url($browsenum); ?>&set_pid=<?php echo attr_url($_GET['set_pid']); ?>">
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 <input type="hidden" name="browsenum" value="<?php echo attr($browsenum); ?>">
 <span class='bold'> <?php echo xlt('Insurance Provider'); ?>:</span>
 <select name='insurance' onchange="javascript:document.insurance_form.submit();">
@@ -182,7 +185,7 @@ function auto_populate_employer_address(){
 <td><span class='text'>
     <?php
   //Modified 7/2009 by BM to incorporate data types
-    echo generate_display_field(['data_type' => $GLOBALS['state_data_type'],'list_id' => $GLOBALS['state_list']], $result3['subscriber_state']);
+    echo generate_display_field(['data_type' => OEGlobalsBag::getInstance()->get('state_data_type'),'list_id' => OEGlobalsBag::getInstance()->get('state_list')], $result3['subscriber_state']);
     ?>
 </span></td>
 </tr>
@@ -195,7 +198,7 @@ function auto_populate_employer_address(){
 <td><span class='text'>
     <?php
   //Modified 7/2009 by BM to incorporate data types
-    echo generate_display_field(['data_type' => $GLOBALS['country_data_type'],'list_id' => $GLOBALS['country_list']], $result3['subscriber_country']);
+    echo generate_display_field(['data_type' => OEGlobalsBag::getInstance()->get('country_data_type'),'list_id' => OEGlobalsBag::getInstance()->get('country_list')], $result3['subscriber_country']);
     ?>
 </span></td>
 </tr>
@@ -229,7 +232,7 @@ function auto_populate_employer_address(){
 <td><span class='text'><?php echo text($result3['policy_number']);?></span></td>
 </tr>
 
-    <?php if (empty($GLOBALS['omit_employers'])) { ?>
+    <?php if (!OEGlobalsBag::getInstance()->getBoolean('omit_employers')) { ?>
 <tr>
 <td><span class='text'><?php echo xlt('Subscriber Employer'); ?>:</span></td>
 <td><span class='text'><?php echo text($result3['subscriber_employer']);?></span></td>
@@ -251,7 +254,7 @@ function auto_populate_employer_address(){
 <td><span class='text'>
         <?php
       //Modified 7/2009 by BM to incorporate data types
-        echo generate_display_field(['data_type' => $GLOBALS['state_data_type'],'list_id' => $GLOBALS['state_list']], $result3['subscriber_employer_state']);
+        echo generate_display_field(['data_type' => OEGlobalsBag::getInstance()->get('state_data_type'),'list_id' => OEGlobalsBag::getInstance()->get('state_list')], $result3['subscriber_employer_state']);
         ?>
 </span></td>
 </tr>
@@ -260,7 +263,7 @@ function auto_populate_employer_address(){
 <td><span class='text'>
         <?php
        //Modified 7/2009 by BM to incorporate data types
-        echo generate_display_field(['data_type' => $GLOBALS['country_data_type'],'list_id' => $GLOBALS['country_list']], $result3['subscriber_employer_country']);
+        echo generate_display_field(['data_type' => OEGlobalsBag::getInstance()->get('country_data_type'),'list_id' => OEGlobalsBag::getInstance()->get('country_list')], $result3['subscriber_employer_country']);
         ?>
 </span></td>
 </tr>

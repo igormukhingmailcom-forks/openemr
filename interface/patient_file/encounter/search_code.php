@@ -4,7 +4,7 @@
  * search_code.php
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2018 Brady Miller <brady.g.miller@gmail.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -14,7 +14,11 @@ require_once("../../globals.php");
 require_once("../../../custom/code_types.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
+
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 
 //the maximum number of records to pull out with the search:
 $M = 30;
@@ -39,7 +43,7 @@ $code_type = $_GET['type'];
 <td class="align-top">
 
 <form name="search_form" id="search_form" method="post" action="search_code.php?type=<?php echo attr_url($code_type); ?>">
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 
 <input type="hidden" name="mode" value="search" />
 
@@ -49,13 +53,13 @@ $code_type = $_GET['type'];
 
 <input type='submit' id="submitbtn" name="submitbtn" value='<?php echo xla('Search'); ?>' />
 <!-- TODO: Use BS4 classes here !-->
-<div id="searchspinner" style="display: inline; visibility: hidden;"><img src="<?php echo $GLOBALS['webroot'] ?>/interface/pic/ajax-loader.gif"></div>
+<div id="searchspinner" style="display: inline; visibility: hidden;"><img src="<?php echo OEGlobalsBag::getInstance()->get('webroot') ?>/interface/pic/ajax-loader.gif"></div>
 
 </form>
 
 <?php
 if (isset($_POST["mode"]) && $_POST["mode"] == "search" && $_POST["text"] == "") {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 
@@ -64,7 +68,7 @@ if (isset($_POST["mode"]) && $_POST["mode"] == "search" && $_POST["text"] == "")
 }
 
 if (isset($_POST["mode"]) && $_POST["mode"] == "search" && $_POST["text"] != "") {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 
@@ -125,7 +129,7 @@ if (isset($_POST["mode"]) && $_POST["mode"] == "search" && $_POST["text"] != "")
                     // "&fee="      . attr_url($iter["fee"]) .
                     "&fee="      . attr_url($iter['pr_price']) .
                     "&text="     . attr_url($iter["code_text"]) .
-                    "&csrf_token_form=" . attr_url(CsrfUtils::collectCsrfToken()) .
+                    "&csrf_token_form=" . CsrfUtils::collectCsrfToken(session: $session) .
                     "' onclick='top.restoreSession()'>";
                 echo ucwords("<b>" . text(strtoupper((string) $iter["code"])) . "&nbsp;" . text($iter['modifier']) .
                     "</b>" . " " . text(strtolower((string) $iter["code_text"])));

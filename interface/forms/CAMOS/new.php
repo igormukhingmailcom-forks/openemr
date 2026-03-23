@@ -4,7 +4,7 @@
  * CAMOS new.php
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Mark Leeds <drleeds@gmail.com>
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2006-2009 Mark Leeds <drleeds@gmail.com>
@@ -16,10 +16,14 @@ require_once(__DIR__ . "/../../globals.php");
 require_once("../../../library/api.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
+
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 
 $out_of_encounter = false;
-if ((($_SESSION['encounter'] == '') || ($_SESSION['pid'] == '')) || ($_GET['mode'] == 'external')) {
+if ((($session->get('encounter') == '') || ($session->get('pid') == '')) || ($_GET['mode'] == 'external')) {
     $out_of_encounter = true;
 }
 
@@ -63,13 +67,13 @@ if (str_starts_with($_POST['hidden_mode'] ?? '', 'add')) {
     if ($_POST['hidden_selection'] == 'change_category') {
         $preselect_category_override = $_POST['change_category'];
         $query = "INSERT INTO " . mitigateSqlTableUpperCase("form_CAMOS_category") . " (user, category) values (?, ?)";
-        sqlStatement($query, [$_SESSION['authUser'], $category]);
+        sqlStatement($query, [$session->get('authUser'), $category]);
     } elseif ($_POST['hidden_selection'] == 'change_subcategory') {
         $preselect_subcategory_override = $_POST['change_subcategory'];
         $category_id = $_POST['hidden_category'];
         if ($category_id >= 0) {
             $query = "INSERT INTO " . mitigateSqlTableUpperCase("form_CAMOS_subcategory") . " (user, subcategory, category_id) values (?, ?, ?)";
-            sqlStatement($query, [$_SESSION['authUser'], $subcategory, $category_id]);
+            sqlStatement($query, [$session->get('authUser'), $subcategory, $category_id]);
         }
     } elseif ($_POST['hidden_selection'] == 'change_item') {
         $preselect_item_override = $_POST['change_item'];
@@ -77,7 +81,7 @@ if (str_starts_with($_POST['hidden_mode'] ?? '', 'add')) {
         $subcategory_id = $_POST['hidden_subcategory'];
         if (($category_id >= 0 ) && ($subcategory_id >= 0)) {
             $query = "INSERT INTO " . mitigateSqlTableUpperCase("form_CAMOS_item") . " (user, item, content, subcategory_id) values (?, ?, ?, ?)";
-            sqlStatement($query, [$_SESSION['authUser'], $item, $content, $subcategory_id]);
+            sqlStatement($query, [$session->get('authUser'), $item, $content, $subcategory_id]);
         }
     } elseif ($_POST['hidden_selection'] == 'change_content') {
         $item_id = $_POST['hidden_item'];
@@ -193,7 +197,7 @@ if ($preselect_category == '' && !$out_of_encounter) {
     //at this point, if this variable has not been set, CAMOS must have been start over
     //so let's get the most recent values from form_CAMOS for this patient's pid
     $tmp = sqlQuery("SELECT max(id) AS max FROM " . mitigateSqlTableUpperCase("form_CAMOS") . " WHERE " .
-    "pid = ?", [$_SESSION['pid']]);
+    "pid = ?", [$session->get('pid')]);
     $maxid = $tmp['max'] ?: 0;
 
     $query = "SELECT category, subcategory, item FROM " . mitigateSqlTableUpperCase("form_CAMOS") . " WHERE id = ?";
@@ -392,7 +396,7 @@ if (!$out_of_encounter) { //do not do stuff that is encounter specific if not in
   //ICD10
     $code_list = '';
     $query = "SELECT code_text, code FROM billing WHERE encounter=? AND pid=? AND code_type like 'ICD10' AND activity=1";
-    $statement = sqlStatement($query, [$_SESSION['encounter'], $_SESSION['pid']]);
+    $statement = sqlStatement($query, [$session->get('encounter'), $session->get('pid')]);
     if ($result = sqlFetchArray($statement)) {
         $code_list = "\n\n" . trim((string) preg_replace('/\r\n|\r|\n/', '', text($result['code'] . " " . $result['code_text'])));
     }
@@ -613,6 +617,7 @@ if (1) { //we are hiding the clone buttons and still need 'search others' so thi
                 }
             }
         } else {//end of clone others
+            $pid = $session->get('pid');
             if ($_POST['hidden_mode'] == 'clone last visit') {
                 //go back $stepback # of encounters...
             //This has been changed to clone last visit based on actual last encounter rather than as it was
@@ -622,11 +627,11 @@ if (1) { //we are hiding the clone buttons and still need 'search others' so thi
             //try from forms where form_name like 'CAMOS%' so we will not bother with encounters that have no CAMOS entries...
                 $stepback = $_POST['stepback'] ?: 1;
                 $tmp = sqlQuery("SELECT max(encounter) as max FROM forms where encounter < ?" .
-                    " and form_name like 'CAMOS%' and pid= ?", [$_SESSION['encounter'], $_SESSION['pid']]);
+                    " and form_name like 'CAMOS%' and pid= ?", [$session->get('encounter'), $pid]);
                 $last_encounter_id = $tmp['max'] ?: 0;
                 for ($i = 0; $i < $stepback - 1; $i++) {
                         $tmp = sqlQuery("SELECT max(encounter) as max FROM forms where encounter < ?" .
-                            " and form_name like 'CAMOS%' and pid= ?", [$last_encounter_id, $_SESSION['pid']]);
+                            " and form_name like 'CAMOS%' and pid= ?", [$last_encounter_id, $pid]);
                         $last_encounter_id = $tmp['max'] ?: 0;
                 }
 
@@ -634,11 +639,11 @@ if (1) { //we are hiding the clone buttons and still need 'search others' so thi
                 "join forms on (" . mitigateSqlTableUpperCase("form_CAMOS") . ".id = forms.form_id) where " .
                 "forms.encounter = ? and " . mitigateSqlTableUpperCase("form_CAMOS") . ".pid=? " .
                 " order by " . mitigateSqlTableUpperCase("form_CAMOS") . ".id";
-                $statement = sqlStatement($query, [$last_encounter_id, $_SESSION['pid']]);
+                $statement = sqlStatement($query, [$last_encounter_id, $pid]);
             } else {
                 $query = "SELECT date(date) as date, subcategory, item, content FROM " . mitigateSqlTableUpperCase("form_CAMOS") . " WHERE category like ? " .
                     " and pid=? order by id desc";
-                $statement = sqlStatement($query, [$clone_category, $_SESSION['pid']]);
+                $statement = sqlStatement($query, [$clone_category, $pid]);
             }
 
             while ($result = sqlFetchArray($statement)) {
@@ -669,8 +674,9 @@ if (1) { //we are hiding the clone buttons and still need 'search others' so thi
             }
 
             if ($_POST['hidden_mode'] == 'clone last visit') {
+                $pid = $session->get('pid');
                 $query = "SELECT t1.* FROM form_vitals as t1 join forms as t2 on (t1.id = t2.form_id) WHERE t2.encounter = ? and t1.pid=? and t2.form_name like 'Vitals'";
-                $statement = sqlStatement($query, [$last_encounter_id, $_SESSION['pid']]);
+                $statement = sqlStatement($query, [$last_encounter_id, $pid]);
                 if ($result = sqlFetchArray($statement)) {
                     $weight = $result['weight'];
                     $height = $result['height'];
@@ -685,7 +691,7 @@ if (1) { //we are hiding the clone buttons and still need 'search others' so thi
                 }
 
                 $query = "SELECT code_type, code, code_text, modifier, units, fee, justify FROM billing WHERE encounter = ? and pid=? and activity=1 order by id";
-                $statement = sqlStatement($query, [$last_encounter_id, $_SESSION['pid']]);
+                $statement = sqlStatement($query, [$last_encounter_id, $pid]);
                 while ($result = sqlFetchArray($statement)) {
                     $clone_code_type = $result['code_type'];
                     $clone_code = $result['code'];
@@ -812,7 +818,7 @@ function click_item() {
   var sel = f2["select_item[]"].options[item_index].value;
   for (var i1=0;i1<array3.length;i1++) {
     if (array3[i1][3] == sel) {
-      //diplay text in content box
+      //display text in content box
       f2.textarea_content.value= array3[i1][1].replace(/\\/g,'');
     }
   }
@@ -903,13 +909,10 @@ function processajax (serverPage, obj, getOrPost, str){
 
 function setformvalues(form_array){
 
-  //Run through a list of all objects
-  var str = '';
-  for(key in form_array) {
-    str += key + "=" + encodeURIComponent(form_array[key]) + "&";
-  }
+  //Run through a list of all objects and build query string
+  const params = new URLSearchParams(form_array);
   //Then return the string values.
-  return str;
+  return params.toString();
 }
 
 //END OF AJAX RELATED FUNCTIONS
@@ -1027,11 +1030,11 @@ if ( (mode == 'add') || (mode == 'alter') ) {
 <?php
 if (!$out_of_encounter) {
     ?>
-    f2.action = '<?php print $GLOBALS['webroot'] ?>/interface/patient_file/encounter/load_form.php?formname=CAMOS';
+    f2.action = '<?php print OEGlobalsBag::getInstance()->get('webroot') ?>/interface/patient_file/encounter/load_form.php?formname=CAMOS';
     <?php
 } else {
     ?>
-    f2.action = '<?php print $GLOBALS['webroot'] ?>/interface/forms/CAMOS/new.php?mode=external';
+    f2.action = '<?php print OEGlobalsBag::getInstance()->get('webroot') ?>/interface/forms/CAMOS/new.php?mode=external';
     <?php
 }
 ?>
@@ -1050,10 +1053,10 @@ if (!$out_of_encounter) {
       myarray['content'] = (f2.textarea_content.value).substring(f2.textarea_content.selectionStart, f2.textarea_content.selectionEnd);
     }
     else {myarray['content'] = f2.textarea_content.value;}
-    myarray['csrf_token_form'] = <?php echo js_escape(CsrfUtils::collectCsrfToken()); ?>;
+    myarray['csrf_token_form'] = <?php echo js_escape(CsrfUtils::collectCsrfToken(session: $session)); ?>;
     var str = setformvalues(myarray);
 //    alert(str);
-    processajax ('<?php print $GLOBALS['webroot'] ?>/interface/forms/CAMOS/ajax_save.php', myobj, "post", str);
+    processajax ('<?php print OEGlobalsBag::getInstance()->get('webroot') ?>/interface/forms/CAMOS/ajax_save.php', myobj, "post", str);
 //    alert("submitted!");
 //ajax code
 }
@@ -1092,7 +1095,7 @@ $(function (body) {
 <body class="body_top">
 <div name="form_container" onKeyPress="gotoOne(event)">
 <form method='post' action="<?php echo $rootdir;?>/forms/CAMOS/save.php?mode=new" name="CAMOS">
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 <?php
 if (!$out_of_encounter) {
 //  echo "<h1>$out_of_encounter</h1>\n";
@@ -1114,7 +1117,7 @@ if (!$out_of_encounter) {
   <option value='12'><?php echo xlt('Back twelve visits'); ?></option>
 </select>
     <?php
-    echo "<a href='{$GLOBALS['form_exit_url']}' onclick='top.restoreSession()'>[" . xlt('Leave The Form') . "]</a>";
+    echo "<a href='" . OEGlobalsBag::getInstance()->get('form_exit_url') . "' onclick='top.restoreSession()'>[" . xlt('Leave The Form') . "]</a>";
     ?>
 <input type='button' name='hide columns' value='<?php echo xla('Hide/Show Columns'); ?>' onClick="hide_columns()">
 <input type='button' name='submit form' value='<?php echo xla('Submit Selected Content'); ?>' onClick="js_button('submit','submit_selection')">
@@ -1255,8 +1258,8 @@ if (!$out_of_encounter) { //do not do stuff that is encounter specific if not in
 <?php
 
 if (!$out_of_encounter) { //do not do stuff that is encounter specific if not in an encounter
-    echo "<a href='{$GLOBALS['form_exit_url']}' onclick='top.restoreSession()'>[" . xlt('Leave The Form') . "]</a>";
-    echo "<a href='" . $GLOBALS['webroot'] . "/interface/forms/CAMOS/help.html' target='new'> | [" . xlt('Help') . "]</a>";
+    echo "<a href='" . OEGlobalsBag::getInstance()->get('form_exit_url') . "' onclick='top.restoreSession()'>[" . xlt('Leave The Form') . "]</a>";
+    echo "<a href='" . OEGlobalsBag::getInstance()->get('webroot') . "/interface/forms/CAMOS/help.html' target='new'> | [" . xlt('Help') . "]</a>";
 //  echo $previous_encounter_data; //probably don't need anymore now that we have clone last visit
 }
 ?>
@@ -1273,7 +1276,8 @@ function searchName($string)
  //match one or more names and return clause for query of pids
     $string = trim((string) $string);
     if ($string == 'this') {
-        return " and (pid = '" . add_escape_custom($_SESSION['pid']) . "') ";
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
+        return " and (pid = '" . add_escape_custom($session->get('pid')) . "') ";
     }
 
     global $limit;

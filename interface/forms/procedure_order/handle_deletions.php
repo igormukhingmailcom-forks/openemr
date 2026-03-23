@@ -4,7 +4,7 @@
  * AJAX handler for real-time deletions of procedures and specimens
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Jerry Padgett <sjpadgett@gmail.com>
  * @copyright Copyright (c) 2025 Jerry Padgett <sjpadgett@gmail.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -13,9 +13,12 @@
 require_once(__DIR__ . "/../../globals.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 
 // Verify CSRF token
-if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"] ?? '')) {
+if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"] ?? '', session: $session)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'CSRF validation failed']);
     exit;
@@ -37,7 +40,7 @@ try {
         default:
             $response['error'] = 'Invalid action';
     }
-} catch (Exception $e) {
+} catch (\Throwable $e) {
     $response['error'] = $e->getMessage();
 }
 
@@ -62,22 +65,23 @@ function deleteProcedure()
     try {
         // Delete procedure answers (QOE)
         sqlStatement(
-            "DELETE FROM procedure_answers 
+            "DELETE FROM procedure_answers
              WHERE procedure_order_id = ? AND procedure_order_seq = ?",
             [$orderId, $orderSeq]
         );
 
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
         // Soft delete specimens (set deleted = 1)
         sqlStatement(
-            "UPDATE procedure_specimen 
+            "UPDATE procedure_specimen
              SET deleted = 1, updated_by = ?
              WHERE procedure_order_id = ? AND procedure_order_seq = ?",
-            [($_SESSION['authUserID'] ?? null), $orderId, $orderSeq]
+            [($session->get('authUserID')), $orderId, $orderSeq]
         );
 
         // Hard delete the procedure order code
         sqlStatement(
-            "DELETE FROM procedure_order_code 
+            "DELETE FROM procedure_order_code
              WHERE procedure_order_id = ? AND procedure_order_seq = ?",
             [$orderId, $orderSeq]
         );
@@ -102,7 +106,7 @@ function deleteProcedure()
             'success' => true,
             'orderEmpty' => ($remaining['cnt'] == 0)
         ];
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         sqlRollbackTrans();
         throw $e;
     }
@@ -120,15 +124,16 @@ function deleteSpecimen()
     }
 
     try {
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
         sqlStatement(
-            "UPDATE procedure_specimen 
+            "UPDATE procedure_specimen
              SET deleted = 1, updated_by = ?
              WHERE procedure_specimen_id = ?",
-            [($_SESSION['authUserID'] ?? null), $specimenId]
+            [$session->get('authUserID'), $specimenId]
         );
 
         return ['success' => true];
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         return ['success' => false, 'error' => $e->getMessage()];
     }
 }

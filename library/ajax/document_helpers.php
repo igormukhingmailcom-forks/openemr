@@ -15,9 +15,12 @@
 require_once(__DIR__ . "/../../interface/globals.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEGlobalsBag;
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 //verify csrf
-if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"])) {
+if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 
@@ -39,7 +42,7 @@ function get_patients_list($req): void
         [$term]
     );
     while ($row = sqlFetchArray($response)) {
-        if ($GLOBALS['pid'] == $row['value']) {
+        if (OEGlobalsBag::getInstance()->get('pid') == $row['value']) {
             $row['value'] = "00";
             $row['label'] = xl("Locked") . "-" . xl("In Use") . ":" . $row['label'];
         }

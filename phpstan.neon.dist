@@ -4,7 +4,8 @@ includes:
 parameters:
   bootstrapFiles:
   - .phpstan/phpstan_panther_alias.php
-  level: 1
+  - .phpstan/phpstan_include_paths.php
+  level: 10
   # Set tmpDir explicitly so we know what it is
   tmpDir: tmp-phpstan
   paths:
@@ -15,6 +16,7 @@ parameters:
   - apis
   - ccdaservice
   - ccr
+  - config
   - contrib
   - controller.php
   - controllers
@@ -36,7 +38,6 @@ parameters:
   - templates
   - tests
   - version.php
-  scanDirectories:
-  - ./vendor
   scanFiles:
   - library/sql.inc.php
+  - interface/modules/custom_modules/oe-module-faxsms/.phpstan/SignalWireStubs.php

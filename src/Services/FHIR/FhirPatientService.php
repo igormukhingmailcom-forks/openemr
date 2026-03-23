@@ -2,15 +2,16 @@
 
 namespace OpenEMR\Services\FHIR;
 
+use OpenEMR\FHIR\R4\FHIRDomainResource\FHIRPatient;
 use OpenEMR\FHIR\R4\FHIRDomainResource\FHIRPractitioner;
+use OpenEMR\FHIR\R4\FHIRElement\FHIRAdministrativeGender;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRCode;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRCodeableConcept;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRCoding;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRContactPoint;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRContactPointSystem;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRContactPointUse;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRDateTime;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRExtension;
+use OpenEMR\FHIR\R4\FHIRElement\FHIRHumanName;
+use OpenEMR\FHIR\R4\FHIRElement\FHIRId;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRIdentifier;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRIdentifierUse;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRMeta;
@@ -25,10 +26,6 @@ use OpenEMR\Services\FHIR\Traits\FhirBulkExportDomainResourceTrait;
 use OpenEMR\Services\FHIR\Traits\VersionedProfileTrait;
 use OpenEMR\Services\ListService;
 use OpenEMR\Services\PatientService;
-use OpenEMR\FHIR\R4\FHIRDomainResource\FHIRPatient;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRHumanName;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRAdministrativeGender;
-use OpenEMR\FHIR\R4\FHIRElement\FHIRId;
 use OpenEMR\Services\Search\FhirSearchParameterDefinition;
 use OpenEMR\Services\Search\ISearchField;
 use OpenEMR\Services\Search\SearchFieldType;
@@ -41,7 +38,7 @@ use OpenEMR\Validators\ProcessingResult;
  * FHIR Patient Service
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Jerry Padgett <sjpadgett@gmail.com>
  * @author    Dixon Whitmire <dixonwh@gmail.com>
  * @copyright Copyright (c) 2020 Jerry Padgett <sjpadgett@gmail.com>
@@ -377,18 +374,42 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
 
     private function parseOpenEMRGenderAndBirthSex(FHIRPatient $patientResource, $sex)
     {
+        $genderValue = strtolower((string) $sex) ?? 'unknown';
         // @see https://www.hl7.org/fhir/us/core/ValueSet-birthsex.html
-        $genderValue = $sex ?? 'Unknown';
-        $birthSex = "UNK";
+        // 3.1.1 birthSex -> M | F | UNK
+        // 7.0.0 birthSex -> https://vsac.nlm.nih.gov/valueset/2.16.840.1.113762.1.4.1021.24/expansion
+        //      F,M,UNK,OTH,UNK,ASKU,asked-declined
+        // 8.0.0 birthSex dropped as mandatory field
+        $birthSex = match($this->getHighestCompatibleUSCoreProfileVersion()) {
+            self::PROFILE_VERSION_3_1_1 => match($genderValue) {
+                'male' => 'M'
+                ,'female' => 'F'
+                ,default => 'UNK'
+            },
+            // self::PROFILE_VERSION_7_0_0, self::PROFILE_VERSION_8_0_0, and future
+            default => match($genderValue) {
+                'male' => 'M'
+                ,'female' => 'F'
+                ,'oth' => 'OTH'
+                ,'asku' => 'ASKU'
+                ,'asked-declined' => 'asked-declined'
+                ,default => 'UNK'
+            }
+        };
+
         $gender = new FHIRAdministrativeGender();
         $birthSexExtension = new FHIRExtension();
-        if ($genderValue !== 'Unknown') {
-            if ($genderValue === 'Male') {
-                $birthSex = 'M';
-            } elseif ($genderValue === 'Female') {
-                $birthSex = 'F';
-            }
-        }
+
+        // http://hl7.org/fhir/R4/valueset-administrative-gender.html
+        // 3.1.1,7.0.0 gender -> male | female | other | unknown
+
+        $genderValue = match($genderValue) {
+            'male','female' => $genderValue
+            // unk -> 'unknown' per HL7 spec
+            ,'unk' => 'unknown'
+
+            ,default => 'other'
+        };
         $gender->setValue(strtolower($genderValue));
         $birthSexExtension->setUrl("http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex");
         $birthSexExtension->setValueCode($birthSex);
@@ -410,7 +431,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
 
         if (!empty($race)) {
             $record = $this->getCachedListOption('race', $race);
-            if ($race === 'declne_to_specfy') { // TODO: we should rename this mispelled value in the database
+            if ($race === 'decline_to_specify' || $race === 'declne_to_specfy') {
                 // @see https://www.hl7.org/fhir/us/core/ValueSet-omb-race-category.html
                 $code = "ASKU";
                 $display = xlt("Asked but no answer");
@@ -450,7 +471,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
             if (!empty($record)) {
                 $textExtension->setValueString($record['title']);
                 // the only possible options for ombCategory are hispanic or not hispanic
-                if ($record['option_id'] != 'declne_to_specfy') {
+                if ($record['option_id'] != 'decline_to_specify' && $record['option_id'] != 'declne_to_specfy') {
                     $coding = new FHIRCoding();
                     $coding->setSystem(new FHIRUri("http://terminology.hl7.org/CodeSystem/v3-Ethnicity"));
                     $coding->setCode($record['notes']);
@@ -566,7 +587,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
         }
     }
 
-    protected function parseOpenEMRGenderIdentity(FhirPatient $patientResource, array $dataRecord): void
+    protected function parseOpenEMRGenderIdentity(FHIRPatient $patientResource, array $dataRecord): void
     {
         if (!empty($dataRecord['gender_identity'])) {
             $genderIdentityExtension = new FHIRExtension();
@@ -867,7 +888,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
     }
 
     /**
-     * Inserts an OpenEMR record into the sytem.
+     * Inserts an OpenEMR record into the system.
      *
      * @param array $openEmrRecord OpenEMR patient record
      * @return ProcessingResult
@@ -1027,7 +1048,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
         $mapping = [
             'M' => 'Male',
             'F' => 'Female',
-            'U' => 'Unknown',
+            'UNK' => 'Unknown',
         ];
         return $mapping[$value] ?? 'Unknown';
     }

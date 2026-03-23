@@ -4,7 +4,7 @@
  * Work/School Note Form save.php
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Nikolai Vitsyn
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2004-2005 Nikolai Vitsyn
@@ -18,8 +18,10 @@ require_once("$srcdir/api.inc.php");
 require_once("$srcdir/forms.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
-if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
+if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 

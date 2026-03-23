@@ -4,7 +4,7 @@
  * ONoteService
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Matthew Vita <matthewvita48@gmail.com>
  * @author    Jerry Padgett <sjpadgett@gmail.com>
  * @copyright Copyright (c) 2017 Matthew Vita <matthewvita48@gmail.com>
@@ -13,6 +13,8 @@
  */
 
 namespace OpenEMR\Services;
+
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
 class ONoteService
 {
@@ -31,7 +33,8 @@ class ONoteService
      */
     public function add($body)
     {
-        return sqlInsert("INSERT INTO `onotes` (`date`, `body`, `user`, `groupname`, `activity`) VALUES (NOW(), ?, ?, ?, 1)", [$body, $_SESSION["authUser"], $_SESSION['authProvider']]);
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
+        return sqlInsert("INSERT INTO `onotes` (`date`, `body`, `user`, `groupname`, `activity`) VALUES (NOW(), ?, ?, ?, 1)", [$body, $session->get("authUser"), $session->get('authProvider')]);
     }
 
     /**

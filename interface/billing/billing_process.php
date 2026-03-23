@@ -6,7 +6,7 @@
  * This program processes data for claims generation
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @author    Terry Hill <terry@lilysystems.com>
  * @author    Jerry Padgett <sjpadgett@gmail.com>
@@ -22,9 +22,11 @@ require_once("../globals.php");
 
 use OpenEMR\Billing\BillingProcessor\BillingProcessor;
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
 
-if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
+if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 

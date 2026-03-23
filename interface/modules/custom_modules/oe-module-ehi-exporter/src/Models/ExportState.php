@@ -6,7 +6,7 @@
  * information as well as the xml concrete table information.
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  *
  * @author    Stephen Nielson <snielson@discoverandchange.com
  * @copyright Copyright (c) 2023 OpenEMR Foundation, Inc
@@ -16,22 +16,23 @@
 namespace OpenEMR\Modules\EhiExporter\Models;
 
 use OpenEMR\Common\Database\QueryUtils;
-use OpenEMR\Common\Logging\SystemLogger;
-use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportFormsGroupsEncounterTableDefinition;
-use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportClinicalNotesFormTableDefinition;
-use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportEsignatureTableDefinition;
+use OpenEMR\Modules\EhiExporter\Models;
+use OpenEMR\Modules\EhiExporter\Models\EhiExportJobTask;
+use OpenEMR\Modules\EhiExporter\Models\ExportKeyDefinition;
+use OpenEMR\Modules\EhiExporter\Models\ExportTableResult;
 use OpenEMR\Modules\EhiExporter\Services\ExportKeyDefinitionFilterer;
+use OpenEMR\Modules\EhiExporter\Services\ExportTableDataFilterer;
+use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportClinicalNotesFormTableDefinition;
+use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportContactTableDefinition;
+use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportEsignatureTableDefinition;
+use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportFormsGroupsEncounterTableDefinition;
 use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportOnsiteMailTableDefinition;
 use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportOnsiteMessagesTableDefinition;
 use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportOpenEmrPostCalendarEventsTableDefinition;
-use OpenEMR\Modules\EhiExporter\Services\ExportTableDataFilterer;
-use OpenEMR\Modules\EhiExporter\Models\ExportTableResult;
-use OpenEMR\Modules\EhiExporter\Models;
-use OpenEMR\Modules\EhiExporter\Models\ExportResult;
-use OpenEMR\Modules\EhiExporter\Models\ExportKeyDefinition;
+use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportPersonTableDefinition;
 use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportTableDefinition;
-use OpenEMR\Modules\EhiExporter\Models\EhiExportJobTask;
 use OpenEMR\Modules\EhiExporter\TableDefinitions\ExportTrackAnythingFormTableDefinition;
+use Psr\Log\LoggerInterface;
 
 class ExportState
 {
@@ -51,8 +52,12 @@ class ExportState
 
     private readonly ExportKeyDefinitionFilterer $keyFilterer;
 
-    public function __construct(private readonly SystemLogger $logger, public \SimpleXMLElement $rootNode, private readonly \SimpleXMLElement $metaNode, private readonly EhiExportJobTask $jobTask)
-    {
+    public function __construct(
+        private readonly LoggerInterface $logger,
+        public \SimpleXMLElement $rootNode,
+        private readonly \SimpleXMLElement $metaNode,
+        private readonly EhiExportJobTask $jobTask
+    ) {
         $this->queue = new \SplQueue();
         $this->result = new Models\ExportResult();
         $this->tableDefinitionsMap = [];
@@ -264,22 +269,18 @@ class ExportState
     private function exportTableDefininitionFactory(string $tableName)
     {
         // for specific tables that we need to do special handling with
-        if ($tableName == ExportOnsiteMessagesTableDefinition::TABLE_NAME) {
-            return new ExportOnsiteMessagesTableDefinition($tableName);
-        } else if ($tableName == ExportOnsiteMailTableDefinition::TABLE_NAME) {
-            return new ExportOnsiteMailTableDefinition($tableName);
-        } else if ($tableName == ExportEsignatureTableDefinition::TABLE_NAME) {
-            return new ExportEsignatureTableDefinition($tableName);
-        } else if ($tableName == ExportOpenEmrPostCalendarEventsTableDefinition::TABLE_NAME) {
-            return new ExportOpenEmrPostCalendarEventsTableDefinition($tableName);
-        } else if ($tableName == ExportClinicalNotesFormTableDefinition::TABLE_NAME) {
-            return new ExportClinicalNotesFormTableDefinition($tableName);
-        } else if ($tableName == ExportFormsGroupsEncounterTableDefinition::TABLE_NAME) {
-            return new ExportFormsGroupsEncounterTableDefinition($tableName);
-        } else if ($tableName == ExportTrackAnythingFormTableDefinition::TABLE_NAME) {
-            return new ExportTrackAnythingFormTableDefinition($tableName);
-        }
-        return new \OpenEMR\Modules\EhiExporter\TableDefinitions\ExportTableDefinition($tableName);
+        return match ($tableName) {
+            ExportOnsiteMessagesTableDefinition::TABLE_NAME => new ExportOnsiteMessagesTableDefinition($tableName),
+            ExportOnsiteMailTableDefinition::TABLE_NAME => new ExportOnsiteMailTableDefinition($tableName),
+            ExportEsignatureTableDefinition::TABLE_NAME => new ExportEsignatureTableDefinition($tableName),
+            ExportOpenEmrPostCalendarEventsTableDefinition::TABLE_NAME => new ExportOpenEmrPostCalendarEventsTableDefinition($tableName),
+            ExportClinicalNotesFormTableDefinition::TABLE_NAME => new ExportClinicalNotesFormTableDefinition($tableName),
+            ExportFormsGroupsEncounterTableDefinition::TABLE_NAME => new ExportFormsGroupsEncounterTableDefinition($tableName),
+            ExportTrackAnythingFormTableDefinition::TABLE_NAME => new ExportTrackAnythingFormTableDefinition($tableName),
+            ExportContactTableDefinition::TABLE_NAME => new ExportContactTableDefinition($tableName),
+            ExportPersonTableDefinition::TABLE_NAME => new ExportPersonTableDefinition($tableName),
+            default => new ExportTableDefinition($tableName),
+        };
     }
 
     private function existsTable(string $foreignTableName)

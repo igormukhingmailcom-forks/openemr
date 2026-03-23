@@ -4,7 +4,7 @@
  * Wrapper for implementing tabs. Currently based on jQuery UI Tabs.
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Rod Roark <rod@sunsetsystems.com>
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2017 Rod Roark <rod@sunsetsystems.com>
@@ -13,6 +13,8 @@
  */
 
 namespace OpenEMR\Tabs;
+
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
 class TabsWrapper
 {
@@ -64,7 +66,8 @@ EOD;
           padding: .1em .4em;
         }
 EOD;
-            if ($_SESSION['language_direction'] == 'rtl') {
+            $session = SessionWrapperFactory::getInstance()->getActiveSession();
+            if ($session->get('language_direction') === 'rtl') {
                 $s .= <<<EOD
             .tabs { direction: rtl; }
             .tabs .tabs-nav li.tabs-tab {float: right; }

@@ -7,7 +7,7 @@
  * or enhancing it with additional checks.
  *
  * @package openemr
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Stephen Nielson <snielson@discoverandchange.com>
  * @copyright Copyright (c) 2023 Discover and Change <snielson@discoverandchange.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -54,7 +54,7 @@ class RestApiSecurityCheckEvent extends Event
         $this->scopeType = "";
         $this->resource = "";
         $this->securityCheckFailedResponse = null;
-        $this->skipSecurityCheck = false;
+        $this->skipSecurityCheck = true;
     }
 
     /**

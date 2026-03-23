@@ -1,24 +1,31 @@
 <?php
+
 //First make sure user has access
 require_once("../../interface/globals.php");
 
+use OpenEMR\Common\Acl\AccessDeniedHelper;
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Twig\TwigContainer;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 if (!empty($_POST)) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 }
 
 //ensure user has proper access
 if (!AclMain::aclCheckCore('admin', 'acl')) {
-    echo (new TwigContainer(null, $GLOBALS['kernel']))->getTwig()->render('core/unauthorized.html.twig', ['pageTitle' => xl("ACL Administration")]);
-    exit;
+    AccessDeniedHelper::denyWithTemplate("ACL check failed for admin/acl: ACL Administration", xl("ACL Administration"));
 }
 
 require_once('gacl_admin.inc.php');
+
+// Variables defined in gacl_admin.inc.php
+/** @var \OpenEMR\Gacl\GaclAdminApi $gacl_api Defined in gacl_admin.inc.php line 53 */
+/** @var \ADOConnection $db Database connection reference from $gacl_api->db, defined in gacl_admin.inc.php line 57 */
+/** @var \Smarty $smarty Smarty template engine, defined in gacl_admin.inc.php line 59 */
 
 if (!isset($_POST['action']) ) {
     $_POST['action'] = FALSE;
@@ -89,7 +96,7 @@ switch ($_POST['action']) {
             $gacl_api->debug_text('EDITING ACL');
 
             //CSRF prevent
-            if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"])) {
+            if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"], session: $session)) {
                 CsrfUtils::csrfNotVerified();
             }
 
@@ -147,7 +154,7 @@ switch ($_POST['action']) {
         }
 
         //Grab sections for select boxes
-        foreach (['acl','aco','aro','axo'] as $type) {
+        foreach (['acl', 'aco', 'aro', 'axo'] as $type) {
             $type_array = 'options_'. $type .'_sections';
             ${$type_array} = [];
 
@@ -167,6 +174,12 @@ switch ($_POST['action']) {
             ${$type .'_section_id'} = reset(${$type_array});
         }
 
+        // Variables created dynamically above (lines 155-173)
+        /** @var array<string, string> $options_acl_sections */
+        /** @var array<string, string> $options_aco_sections */
+        /** @var array<string, string> $options_aro_sections */
+        /** @var array<string, string> $options_axo_sections */
+
         //Init the main js array
         $js_array = 'var options = new Array();' . "\n";
 
@@ -182,7 +195,7 @@ switch ($_POST['action']) {
 				FROM '. $gacl_api->_db_table_prefix . $type .'
 				WHERE hidden=0
 				ORDER BY section_value,order_value,name';
-            $rs = $db->SelectLimit($query,$gacl_api->_max_select_box_items);
+            $rs = $db->SelectLimit($query, $gacl_api->_max_select_box_items);
 
             if (is_object($rs)) {
                 while ($row = $rs->FetchRow()) {
@@ -280,7 +293,7 @@ $smarty->assign('page_title', 'ACL Admin');
 $smarty->assign('phpgacl_version', $gacl_api->get_version() );
 $smarty->assign('phpgacl_schema_version', $gacl_api->get_schema_version() );
 
-$smarty->assign("CSRF_TOKEN_FORM", CsrfUtils::collectCsrfToken());
+$smarty->assign("CSRF_TOKEN_FORM", CsrfUtils::collectCsrfToken(session: $session));
 
 $smarty->display('phpgacl/acl_admin.tpl');
 ?>

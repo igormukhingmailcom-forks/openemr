@@ -11,10 +11,12 @@ require_once("../globals.php");
 require_once("drugs.inc.php");
 require_once("$srcdir/options.inc.php");
 
+use OpenEMR\Common\Acl\AccessDeniedHelper;
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Twig\TwigContainer;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 
 $alertmsg = '';
 $drug_id = $_REQUEST['drug'];
@@ -22,8 +24,7 @@ $info_msg = "";
 $tmpl_line_no = 0;
 
 if (!AclMain::aclCheckCore('admin', 'drugs')) {
-    echo (new TwigContainer(null, $GLOBALS['kernel']))->getTwig()->render('core/unauthorized.html.twig', ['pageTitle' => xl("Edit/Add Drug")]);
-    exit;
+    AccessDeniedHelper::denyWithTemplate("ACL check failed for admin/drugs: Edit/Add Drug", xl("Edit/Add Drug"));
 }
 
 // Write a line of data for one template to the form.
@@ -92,13 +93,13 @@ echo ' ' . xlt('Drug'); ?></title>
 
 <style>
 
-<?php if ($GLOBALS['sell_non_drug_products'] == 2) { // "Products but no prescription drugs and no templates" ?>
+<?php if (OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2) { // "Products but no prescription drugs and no templates" ?>
 .drugsonly { display:none; }
 <?php } else { ?>
 .drugsonly { }
 <?php } ?>
 
-<?php if (empty($GLOBALS['ippf_specific'])) { ?>
+<?php if (empty(OEGlobalsBag::getInstance()->get('ippf_specific'))) { ?>
 .ippfonly { display:none; }
 <?php } else { ?>
 .ippfonly { }
@@ -108,7 +109,7 @@ echo ' ' . xlt('Drug'); ?></title>
 
 <script>
 
-<?php require($GLOBALS['srcdir'] . "/restoreSession.php"); ?>
+<?php require(OEGlobalsBag::getInstance()->get('srcdir') . "/restoreSession.php"); ?>
 
 // This is for callback by the find-code popup.
 // Appends to or erases the current list of related codes.
@@ -192,11 +193,12 @@ function validate(f) {
 
 <body class="body_top">
 <?php
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 // If we are saving, then save and close the window.
 // First check for duplicates.
 //
 if (!empty($_POST['form_save'])) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 
@@ -228,7 +230,7 @@ if (!empty($_POST['form_save'])) {
 }
 
 if ((!empty($_POST['form_save']) || !empty($_POST['form_delete'])) && !$alertmsg) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 
@@ -336,7 +338,7 @@ if ((!empty($_POST['form_save']) || !empty($_POST['form_delete'])) && !$alertmsg
         $tmpl = $_POST['form_tmpl'];
        // If using the simplified drug form, then force the one and only
        // selector name to be the same as the product name.
-        if ($GLOBALS['sell_non_drug_products'] == 2) {
+        if (OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2) {
             $tmpl["1"]['selector'] = $_POST['form_name'];
         }
 
@@ -443,7 +445,7 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
 <h3 class="ml-1"><?php echo text($title);?></h3>
 <form method='post' name='theform' action='add_edit_drug.php?drug=<?php echo attr_url($drug_id); ?>'
  onsubmit='return validate(this);'>
-    <input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+    <input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 
     <div class="form-group">
         <label><?php echo xlt('Name'); ?>:</label>
@@ -485,7 +487,7 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
 
     <div class="form-group mt-3">
         <label><?php echo xlt('NDC Number'); ?>:</label>
-        <input class="form-control w-100" size="40" name="form_ndc_number" maxlength="20" value='<?php echo attr($row['ndc_number']) ?>' onkeyup='maskkeyup(this,"<?php echo attr(addslashes((string) $GLOBALS['gbl_mask_product_id'])); ?>")' onblur='maskblur(this,"<?php echo attr(addslashes((string) $GLOBALS['gbl_mask_product_id'])); ?>")' />
+        <input class="form-control w-100" size="40" name="form_ndc_number" maxlength="20" value='<?php echo attr($row['ndc_number']) ?>' onkeyup='maskkeyup(this,"<?php echo attr(addslashes((string) OEGlobalsBag::getInstance()->get('gbl_mask_product_id'))); ?>")' onblur='maskblur(this,"<?php echo attr(addslashes((string) OEGlobalsBag::getInstance()->get('gbl_mask_product_id'))); ?>")' />
     </div>
 
     <div class="form-group mt-3">
@@ -504,7 +506,7 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
         <table class="table table-borderless pl-5">
             <tr>
                 <td class="align-top ">
-                    <?php echo !empty($GLOBALS['gbl_min_max_months']) ? xlt('Months') : xlt('Units'); ?>
+                    <?php echo !empty(OEGlobalsBag::getInstance()->get('gbl_min_max_months')) ? xlt('Months') : xlt('Units'); ?>
                 </td>
                 <td class="align-top"><?php echo xlt('Global'); ?></td>
 <?php
@@ -600,7 +602,7 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
 
     <div class="form-group mt-3">
         <label>
-            <?php echo $GLOBALS['sell_non_drug_products'] == 2 ? xlt('Fees') : xlt('Templates'); ?>:
+            <?php echo OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2 ? xlt('Fees') : xlt('Templates'); ?>:
         </label>
         <table class='table table-borderless'>
             <thead>
@@ -636,10 +638,10 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
             </thead>
             <tbody>
             <?php
-            $blank_lines = $GLOBALS['sell_non_drug_products'] == 2 ? 1 : 3;
+            $blank_lines = OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2 ? 1 : 3;
             if ($tres) {
                 while ($trow = sqlFetchArray($tres)) {
-                    $blank_lines = $GLOBALS['sell_non_drug_products'] == 2 ? 0 : 1;
+                    $blank_lines = OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2 ? 0 : 1;
                     $selector = $trow['selector'];
                 // Get array of prices.
                     $prices = [];
@@ -669,7 +671,7 @@ $title = $drug_id ? xl("Update Drug") : xl("Add Drug");
             }
 
             for ($i = 0; $i < $blank_lines; ++$i) {
-                $selector = $GLOBALS['sell_non_drug_products'] == 2 ? $row['name'] : '';
+                $selector = OEGlobalsBag::getInstance()->get('sell_non_drug_products') == 2 ? $row['name'] : '';
                 writeTemplateLine($selector, '', '', '', '', $emptyPrices, '', '1');
             }
             ?>
@@ -701,7 +703,7 @@ dispensable_changed();
 
 <?php
 if ($alertmsg) {
-    echo "alert('" . addslashes((string) $alertmsg) . "');\n";
+    echo "alert('" . addslashes($alertmsg) . "');\n";
 }
 ?>
 

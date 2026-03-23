@@ -3,15 +3,15 @@
 namespace OpenEMR\Validators;
 
 use OpenEMR\Common\Uuid\UuidRegistry;
-use OpenEMR\Validators\ProcessingResult;
 use Particle\Validator\Validator;
 use Ramsey\Uuid\Exception\InvalidUuidStringException;
+use Webmozart\Assert\InvalidArgumentException;
 
 /**
  * Base class for OpenEMR object validation.
  * Validation processes are implemented using Particle (https://github.com/particle-php/Validator)
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Dixon Whitmire <dixonwh@gmail.com>
  * @author    Stephen Nielson <snielson@discoverandchange.com>
  * @copyright Copyright (c) 2020 Jerry Padgett <sjpadgett@gmail.com>
@@ -37,6 +37,16 @@ abstract class BaseValidator
     protected function configureValidator()
     {
         array_push($this->supportedContexts, self::DATABASE_INSERT_CONTEXT, self::DATABASE_UPDATE_CONTEXT);
+
+        if (!method_exists($this, 'configureValidatorContext')) {
+            return;
+        }
+
+        foreach ($this->supportedContexts as $contextName) {
+            $this->validator->context($contextName, function (Validator $validator) use ($contextName): void {
+                $this->configureValidatorContext($validator, $contextName);
+            });
+        }
     }
 
     public function __construct()
@@ -71,7 +81,8 @@ abstract class BaseValidator
      *
      * @param $dataFields -  The fields to validate.
      * @param $context - The validation context to utilize. This is simply a "handle" for the rules.
-     * @return $validationResult array
+     * @return ProcessingResult
+     * @throws InvalidArgumentException
      */
     public function validate($dataFields, $context)
     {
@@ -79,12 +90,26 @@ abstract class BaseValidator
             throw new \RuntimeException("unsupported context: " . $context);
         }
 
-        $validationResult = $this->validator->validate($dataFields, $context);
-
         $result = new ProcessingResult();
-        $result->setValidationMessages($validationResult->getMessages());
+        try {
+            $this->assertNoExtraFields($dataFields, $context);
+
+            $validationResult = $this->validator->validate($dataFields, $context);
+            $result->setValidationMessages($validationResult->getMessages());
+        } catch (InvalidArgumentException $exception) {
+            $result->setValidationMessages([
+                $exception->getMessage(),
+            ]);
+        }
 
         return $result;
+    }
+
+    /**
+     * @throws InvalidArgumentException When there are extra fields found
+     */
+    public function assertNoExtraFields(array $data, string $context): void
+    {
     }
 
     /**
@@ -94,7 +119,7 @@ abstract class BaseValidator
      * @param $table The table in database
      * @param $lookupId The identifier to validateId
      * @param $isUuid true if the lookupId is UUID, otherwise false
-     * @return true if the lookupId is a valid existing id, otherwise Validation Message
+     * @return ProcessingResult|true True if valid, ProcessingResult with validation messages otherwise.
      */
     public static function validateId($field, $table, $lookupId, $isUuid = false)
     {

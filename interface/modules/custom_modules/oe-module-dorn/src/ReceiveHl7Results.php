@@ -3,7 +3,7 @@
 /**
  *
  * @package OpenEMR
- * @link    http://www.open-emr.org
+ * @link    https://www.open-emr.org
  *
  * @author    Brad Sharp <brad.sharp@claimrev.com>
  * @copyright Copyright (c) 2022-2025 Brad Sharp <brad.sharp@claimrev.com>
@@ -13,7 +13,12 @@
 namespace OpenEMR\Modules\Dorn;
 
 use Document;
-use OpenEMR\Common\Crypto\CryptoGen;
+use OpenEMR\BC\ServiceContainer;
+use OpenEMR\Common\Crypto\KeySource;
+use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Common\Logging\EventAuditLogger;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Modules\Dorn\ConnectorApi;
 use OpenEMR\Modules\Dorn\models\ReceiveResultsResponseModel;
 
@@ -47,7 +52,7 @@ class ReceiveHl7Results
     public function receiveSingleResults($result, $rejectResult): ReceiveResultsResponseModel
     {
         $returnValue = new ReceiveResultsResponseModel();
-        $resultPath = $GLOBALS['OE_SITE_DIR'] . "/documents/procedure_results";
+        $resultPath = OEGlobalsBag::getInstance()->get('OE_SITE_DIR') . "/documents/procedure_results";
 
         $orderNumber = $result->orderNumber;
         $patientId = $result->patientId;
@@ -80,7 +85,7 @@ class ReceiveHl7Results
         $remote_host = $record['remote_host'];
         $debug = trim((string) $record['DorP']) === 'D';
 
-        $logpath = $GLOBALS['OE_SITE_DIR'] . "/documents/procedure_results/logs/$lab_npi";
+        $logpath = OEGlobalsBag::getInstance()->get('OE_SITE_DIR') . "/documents/procedure_results/logs/$lab_npi";
         $prpath .= $resultPath . '/' . $ppid . '-' . $lab_npi;
         $file = "result_" . $orderNumber . ".hl7";
 
@@ -257,12 +262,12 @@ class ReceiveHl7Results
         // We'll need the document category IDs for any embedded documents.
         $catrow = sqlQuery(
             "SELECT id FROM categories WHERE name = ?",
-            [$GLOBALS['lab_results_category_name']]
+            [OEGlobalsBag::getInstance()->get('lab_results_category_name')]
         );
         if (empty($catrow['id'])) {
             return $this->rhl7LogMsg(
                 xl('Document category for lab results does not exist') .
-                ': ' . $GLOBALS['lab_results_category_name'],
+                ': ' . OEGlobalsBag::getInstance()->get('lab_results_category_name'),
                 true
             );
         } else {
@@ -270,7 +275,7 @@ class ReceiveHl7Results
             $mdm_category_id = $results_category_id;
             $catrow = sqlQuery(
                 "SELECT id FROM categories WHERE name = ?",
-                [$GLOBALS['gbl_mdm_category_name']]
+                [OEGlobalsBag::getInstance()->get('gbl_mdm_category_name')]
             );
             if (!empty($catrow['id'])) {
                 $mdm_category_id = $catrow['id'];
@@ -838,7 +843,7 @@ class ReceiveHl7Results
                 $ares['result_text'] = $result_text;
                 $ares['date'] = $this->rhl7DateTime($a[14] ?? '');
                 //$ares['facility'] = $this->rhl7Text($a[15]);
-                // Ensoftek: Units may have mutiple segments(as seen in MU2 samples), parse and take just first segment.
+                // Ensoftek: Units may have multiple segments(as seen in MU2 samples), parse and take just first segment.
                 $tmp = explode($d2, ($a[6] ?? ''));
                 $ares['units'] = $this->rhl7Text($tmp[0]);
                 $ares['range'] = $this->rhl7Text($a[7] ?? '');
@@ -1057,10 +1062,11 @@ class ReceiveHl7Results
         if ($fatal) {
             $rhl7_return['mssgs'][] = '*' . $msg;
             $rhl7_return['fatal'] = true;
-            EventAuditLogger::instance()->newEvent(
+            $session = SessionWrapperFactory::getInstance()->getActiveSession();
+            EventAuditLogger::getInstance()->newEvent(
                 "lab-results-error",
-                $_SESSION['authUser'],
-                $_SESSION['authProvider'],
+                $session->get('authUser'),
+                $session->get('authProvider'),
                 0,
                 $msg
             );
@@ -1492,8 +1498,7 @@ class ReceiveHl7Results
     private function createEncounter($pid, $provider_id, $order_date, $lab_name)
     {
         global $orphanLog;
-        $conn = $GLOBALS['adodb']['db'];
-        $encounter = $conn->GenID("sequences");
+        $encounter = QueryUtils::generateId();
         addForm(
             $encounter,
             "Auto Generated Lab Encounter",
@@ -1532,7 +1537,9 @@ class ReceiveHl7Results
             return;
         }
 
-        $message_sender = $_SESSION['authUser'];
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
+        $authUser = $session->get('authUser');
+        $message_sender = $authUser;
         $message_group = 'Default';
         $authorized = '0';
         $activity = '1';
@@ -1543,7 +1550,7 @@ class ReceiveHl7Results
         }
 
         if (!$assigned_to) {
-            $assigned_to = $_SESSION['authUser'];
+            $assigned_to = $authUser;
         }
         $notify = $assigned_to; //@todo get user lookup
 
@@ -1622,7 +1629,7 @@ class ReceiveHl7Results
 
         foreach (['-', '\''] as $delimiter) {
             if (str_contains($string, $delimiter)) {
-                $string = implode($delimiter, array_map('ucfirst', explode($delimiter, $string)));
+                $string = implode($delimiter, array_map(ucfirst(...), explode($delimiter, $string)));
             }
         }
         return $string;
@@ -1656,8 +1663,8 @@ class ReceiveHl7Results
      */
     private function hl7Crypt($content)
     {
-        if ($GLOBALS['drive_encryption']) {
-            $content = (new CryptoGen())->encryptStandard($content, null, 'database');
+        if (OEGlobalsBag::getInstance()->getBoolean('drive_encryption')) {
+            $content = (ServiceContainer::getCrypto())->encryptStandard($content, keySource: KeySource::Database);
         }
 
         return $content;

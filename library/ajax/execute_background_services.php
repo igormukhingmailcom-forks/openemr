@@ -5,7 +5,7 @@
  *
  * This script may be executed by a suitable Ajax request, by a cron job, or both.
  *
- * When called from cron, optinal args are [site] [service] [force]
+ * When called from cron, optional args are [site] [service] [force]
  * @param site to specify a specific site, 'default' used if omitted
  * @param service to specify a specific service, 'all' used if omitted
  * @param force '1' to ignore specified wait interval, '0' to honor wait interval
@@ -47,6 +47,8 @@
  */
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEGlobalsBag;
 
 //ajax param should be set by calling ajax scripts
 $isAjaxCall = isset($_POST['ajax']);
@@ -72,8 +74,9 @@ if (!$isAjaxCall && (php_sapi_name() === 'cli')) {
     //an additional require file can be specified for each service in the background_services table
     require_once(__DIR__ . "/../../interface/globals.php");
 
+    $session = SessionWrapperFactory::getInstance()->getActiveSession();
     // not calling from cron job so ensure passes csrf check
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 }
@@ -131,13 +134,13 @@ function execute_background_service_calls(): void
             continue;
         }
 
-        $acquiredLock =  generic_sql_affected_rows();
+        $acquiredLock =  \OpenEMR\Common\Database\QueryUtils::affectedRows();
         if ($acquiredLock < 1) {
             continue; //service is already running or not due yet
         }
 
         if ($service['require_once']) {
-            require_once($GLOBALS['fileroot'] . $service['require_once']);
+            require_once(OEGlobalsBag::getInstance()->get('fileroot') . $service['require_once']);
         }
 
         if (!function_exists($service['function'])) {
@@ -147,7 +150,7 @@ function execute_background_service_calls(): void
         //use try/catch in case service functions throw an unexpected Exception
         try {
             $service['function']();
-        } catch (Exception) {
+        } catch (\Throwable) {
           //do nothing
         }
 
@@ -173,6 +176,6 @@ function background_shutdown(): void
     }
 }
 
-register_shutdown_function('background_shutdown');
+register_shutdown_function(background_shutdown(...));
 execute_background_service_calls();
 unset($service_name);

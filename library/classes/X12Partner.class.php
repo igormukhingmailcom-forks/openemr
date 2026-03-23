@@ -4,7 +4,7 @@
  * class X12Partner
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Ken Chapple <ken@mi-squared.com>
  * @author    Daniel Pflieger <daniel@mi-squared.com>, <daniel@growlingflea.com>
  * @copyright Copyright (c) 2021 Ken Chapple <ken@mi-squared.com>
@@ -57,7 +57,7 @@ class X12Partner extends ORDataObject
      * Constructor sets all Insurance attributes to their default value
      */
 
-    function __construct(public $id = "", $prefix = "")
+    function __construct(public $id = "")
     {
         parent::__construct();
         $this->_table = "x12_partners";

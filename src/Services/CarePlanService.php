@@ -4,7 +4,7 @@
  * CarePlanService.php
  *
  * @package    openemr
- * @link       http://www.open-emr.org
+ * @link       https://www.open-emr.org
  * @author     Stephen Nielson <stephen@nielson.org>
  * @author     Jerry Padgett <sjpadgett@gmail.com>
  * @copyright  Copyright (c) 2021 Stephen Nielson <stephen@nielson.org>
@@ -15,10 +15,7 @@
 namespace OpenEMR\Services;
 
 use OpenEMR\Common\Database\QueryUtils;
-use OpenEMR\Common\Uuid\UuidMapping;
 use OpenEMR\Common\Uuid\UuidRegistry;
-use OpenEMR\Services\FHIR\FhirCodeSystemConstants;
-use OpenEMR\Services\Search\DateSearchField;
 use OpenEMR\Services\Search\FhirSearchWhereClauseBuilder;
 use OpenEMR\Services\Search\ISearchField;
 use OpenEMR\Services\Search\ReferenceSearchField;
@@ -29,7 +26,6 @@ use OpenEMR\Services\Search\TokenSearchField;
 use OpenEMR\Services\Search\TokenSearchValue;
 use OpenEMR\Validators\BaseValidator;
 use OpenEMR\Validators\ProcessingResult;
-use Twig\Token;
 
 class CarePlanService extends BaseService
 {
@@ -223,17 +219,17 @@ class CarePlanService extends BaseService
                     ,username AS provider_username
                 FROM users
              ) provider ON fcp.care_plan_user = provider.provider_username
-             LEFT JOIN `list_options` l ON l.option_id = fcp.care_plan_type 
+             LEFT JOIN `list_options` l ON l.option_id = fcp.care_plan_type
                 AND l.list_id = 'Plan_of_Care_Type'
              LEFT JOIN (
-                SELECT 
+                SELECT
                     fcp_goal.pid,
                     fcp_goal.encounter,
                     GROUP_CONCAT(DISTINCT fcp_goal.id SEPARATOR ',') AS goal_care_plan_ids
                 FROM form_care_plan fcp_goal
                 WHERE fcp_goal.care_plan_type = 'goal'
                 GROUP BY fcp_goal.pid, fcp_goal.encounter
-             ) goals ON goals.pid = fcp.pid 
+             ) goals ON goals.pid = fcp.pid
                 AND (goals.encounter = fcp.encounter OR goals.encounter IS NULL)
              WHERE f.formdir = 'care_plan' AND f.deleted = 0";
 

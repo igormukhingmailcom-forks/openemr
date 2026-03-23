@@ -4,6 +4,7 @@ namespace OpenEMR\Modules\WenoModule\Services;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenEMR\Core\OEGlobalsBag;
 
 class WenoValidate extends ModuleService
 {
@@ -51,7 +52,7 @@ class WenoValidate extends ModuleService
     {
         $gbl = $this->getVendorGlobals();
         $gbl['weno_encryption_key'] = $key;
-        $GLOBALS['weno_encryption_key'] = $key;
+        OEGlobalsBag::getInstance()->set('weno_encryption_key', $key);
         // save the new key to the database.
         // save will also set the global to stay current.
         $this->saveVendorGlobals($gbl);
@@ -159,7 +160,7 @@ class WenoValidate extends ModuleService
 
             $newKey = $response['Body']['Success']['NewEncryptionKey'] ?? '';
             return ($response !== false && !empty($newKey)) ? trim((string) $newKey) : false;
-        } catch (\Exception) {
+        } catch (\Throwable) {
             // Handle Exception
             return false;
         }
@@ -200,7 +201,7 @@ class WenoValidate extends ModuleService
                 $valid = (strtolower($valid) === 'true') || ($valid == '1') && !empty($valid);
             }
             return $valid;
-        } catch (\Exception) {
+        } catch (\Throwable) {
             return false;
         }
     }

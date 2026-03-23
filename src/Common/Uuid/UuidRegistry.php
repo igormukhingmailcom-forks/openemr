@@ -15,7 +15,7 @@
  *    When add support for a new table uuid, need to add it to the populateAllMissingUuids function.
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Gerhard Brink <gjdbrink@gmail.com>
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2019 Gerhard Brink <gjdbrink@gmail.com>
@@ -25,14 +25,13 @@
 
 namespace OpenEMR\Common\Uuid;
 
-use Exception;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\EventAuditLogger;
 use OpenEMR\Common\Uuid\UuidMapping;
 use Ramsey\Uuid\Codec\TimestampFirstCombCodec;
 use Ramsey\Uuid\Generator\CombGenerator;
-use Ramsey\Uuid\UuidFactory;
 use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidFactory;
 
 class UuidRegistry
 {
@@ -77,6 +76,11 @@ class UuidRegistry
     ];
     // Maximum tries to create a unique uuid before failing (this should never happen)
     const MAX_TRIES = 100;
+
+    /**
+     * Maximum number of records to process in a single transaction when populating missing UUIDs
+     */
+    const UUID_TRANSACTION_MAX_RECORDS = 10000;
 
     private $table_name;      // table to check if uuid has already been used in
     private $table_id;        // the label of the column in above table that is used for id (defaults to 'id')
@@ -148,7 +152,7 @@ class UuidRegistry
 
         // log it
         if ($log && !empty($logEntryComment)) {
-            EventAuditLogger::instance()->newEvent('uuid', '', '', 1, 'Automatic uuid service creation: ' . $logEntryComment);
+            EventAuditLogger::getInstance()->newEvent('uuid', '', '', 1, 'Automatic uuid service creation: ' . $logEntryComment);
         }
 
         // return it
@@ -171,7 +175,7 @@ class UuidRegistry
             . " SELECT `uuid_mapping`.`uuid`,'uuid_mapping','id',1 FROM `uuid_mapping` LEFT JOIN `uuid_registry` registry2 ON `uuid_mapping`.`uuid` = registry2.uuid WHERE registry2.uuid IS NULL";
         $result = sqlStatementNoLog($sql, []);
         if ($result !== false) {
-            $createdRows = generic_sql_affected_rows();
+            $createdRows = QueryUtils::affectedRows();
         }
         return $createdRows;
     }
@@ -241,7 +245,7 @@ class UuidRegistry
     private function createMissingUuids()
     {
         try {
-            sqlBeginTrans();
+            QueryUtils::startTransaction();
             $counter = 0;
 
             // we split the loop so we aren't doing a condition inside each one.
@@ -258,12 +262,17 @@ class UuidRegistry
                 do {
                     $count = $this->createMissingUuidsForTableWithId();
                     $counter += $count;
+                    if ($counter % self::UUID_TRANSACTION_MAX_RECORDS == 0 && $counter > 0) {
+                        // commit every 10k to not have a massive transaction
+                        QueryUtils::commitTransaction();
+                        QueryUtils::startTransaction();
+                    }
                 } while ($count > 0);
             }
-            sqlCommitTrans();
+            QueryUtils::commitTransaction();
             return $counter;
-        } catch (Exception $exception) {
-            sqlRollbackTrans();
+        } catch (\Throwable $exception) {
+            QueryUtils::rollbackTransaction();
             throw $exception;
         }
     }
@@ -292,7 +301,7 @@ class UuidRegistry
      */
     public static function isValidStringUUID($uuidString)
     {
-        return (Uuid::isValid($uuidString));
+        return Uuid::isValid($uuidString);
     }
 
     /**
@@ -407,8 +416,8 @@ class UuidRegistry
         WHERE " . implode(" AND ", $columnsWhere) . "
         GROUP BY " . implode(",", $columnsQtwo) . "
         LIMIT " . self::UUID_MAX_BATCH_COUNT;
-        $groupsWithoutUuid = sqlStatementNoLog($query, false, true);
-        $number = sqlNumRows($groupsWithoutUuid);
+        $groupsWithoutUuid = QueryUtils::sqlStatementThrowException($query, [], noLog: true);
+        $number = $groupsWithoutUuid->RecordCount();
 
         // create uuids and populate the groups with them
         if ($number > 0) {
@@ -416,10 +425,10 @@ class UuidRegistry
             $this->insertUuidsIntoRegistry($batchUUids);
             $sqlUpdate = "UPDATE `" . $this->table_name . "` SET `uuid` = ? WHERE " .
                 implode(" AND ", array_map(fn($col): string => "`$col` = ? ", $this->table_vertical));
-            while ($row = sqlFetchArray($groupsWithoutUuid)) {
+            while ($row = QueryUtils::fetchArrayFromResultSet($groupsWithoutUuid)) {
                 $mappedValues = array_map(fn($col) => $row[$col], $this->table_vertical);
                 $bindValues = array_merge([$batchUUids[$counter]], $mappedValues);
-                sqlStatementNoLog($sqlUpdate, $bindValues, true);
+                QueryUtils::sqlStatementThrowException($sqlUpdate, $bindValues, noLog: true);
                 $counter++;
             }
         }
@@ -454,16 +463,16 @@ class UuidRegistry
         WHERE `q2`.`uuid` IS NOT NULL AND `q2`.`uuid` != '' AND `q2`.`uuid` != '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
         GROUP BY " . implode(",", $columnsQtwo) . "
         LIMIT " . self::UUID_MAX_BATCH_COUNT;
-        $groupsWithoutUuid = sqlStatementNoLog($query, false, true);
-        $number = sqlNumRows($groupsWithoutUuid);
+        $groupsWithoutUuid = QueryUtils::sqlStatementThrowException($query, [], noLog: true);
+        $number = $groupsWithoutUuid->RecordCount();
 
         // populate the groups with the already existent uuids
         if ($number > 0) {
             $sqlUpdate = "UPDATE `" . $this->table_name . "` SET `uuid` = ? WHERE " .
                 implode(" AND ", array_map(fn($col): string => "`$col` = ? ", $this->table_vertical));
-            while ($row = sqlFetchArray($groupsWithoutUuid)) {
+            while ($row = QueryUtils::fetchArrayFromResultSet($groupsWithoutUuid)) {
                 $mappedValues = array_map(fn($col) => $row[$col], array_merge(['uuid'], $this->table_vertical));
-                sqlStatementNoLog($sqlUpdate, $mappedValues, true);
+                QueryUtils::sqlStatementThrowException($sqlUpdate, $mappedValues, noLog: true);
                 $counter++;
             }
         }

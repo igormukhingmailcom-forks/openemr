@@ -8,7 +8,7 @@
  *  which join on a documents id and categories which do the same.
  *
  * @package openemr
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Unknown -- No ownership was listed on this document prior to February 5th 2021
  * @author    Stephen Nielson <stephen@nielson.org>
  * @author    Jerry Padgett <sjpadgett@gmail.com>
@@ -20,10 +20,14 @@
 require_once(__DIR__ . "/../pnotes.inc.php");
 require_once(__DIR__ . "/../gprelations.inc.php");
 
+use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Acl\AclMain;
-use OpenEMR\Common\Crypto\CryptoGen;
+use OpenEMR\Common\Crypto\KeySource;
 use OpenEMR\Common\ORDataObject\ORDataObject;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Common\Utils\ValidationUtils;
 use OpenEMR\Common\Uuid\UuidRegistry;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Events\PatientDocuments\PatientDocumentStoreOffsite;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
@@ -68,7 +72,7 @@ class Document extends ORDataObject
 
     /*
     *  DB unique identifier reference to A PATIENT RECORD, this is not unique in the document table. For actual foreign
-    *  keys to a NON-Patient record use foreign_reference_id.  For backwards compatability we ONLY use this for patient
+    *  keys to a NON-Patient record use foreign_reference_id.  For backwards compatibility we ONLY use this for patient
     *  documents.
     *   @public int
     */
@@ -144,7 +148,7 @@ class Document extends ORDataObject
     public $pages;
 
     /*
-    *   Foreign key identifier of who initially persisited the document,
+    *   Foreign key identifier of who initially persisted the document,
     *   potentially ownership could be changed but that would be up to an external non-document object process
     *   @public int
     */
@@ -247,7 +251,7 @@ class Document extends ORDataObject
             $this->populate();
         }
 
-        $this->eventDispatcher = $GLOBALS['kernel']->getEventDispatcher();
+        $this->eventDispatcher = OEGlobalsBag::getInstance()->getKernel()->getEventDispatcher();
     }
 
     /**
@@ -413,7 +417,7 @@ class Document extends ORDataObject
         $sql = "SELECT id FROM " . escape_table_name($d->_table) . " WHERE foreign_reference_table = ? "
         . "AND foreign_reference_id " . $foreign_reference_id_sql;
 
-        (new \OpenEMR\Common\Logging\SystemLogger())->debug(
+        ServiceContainer::getLogger()->debug(
             "documents_factory_for_foreign_reference",
             ['sql' => $sql,
             'sqlArray' => $sqlArray]
@@ -647,7 +651,7 @@ class Document extends ORDataObject
         }
         $from_pathname_array = array_reverse($from_pathname_array);
         $from_pathname = implode("/", $from_pathname_array);
-        $filepath = $GLOBALS['OE_SITE_DIR'] . '/documents/' . $from_pathname . '/' . $from_filename;
+        $filepath = OEGlobalsBag::getInstance()->get('OE_SITE_DIR') . '/documents/' . $from_pathname . '/' . $from_filename;
         return $filepath;
     }
     /**
@@ -793,7 +797,7 @@ class Document extends ORDataObject
     }
     /*
     *   Overridden function to stor current object state in the db.
-    *   current overide is to allow for a just in time foreign id, often this is needed
+    *   current override is to allow for a just in time foreign id, often this is needed
     *   when the object is never directly exposed and is handled as part of a larger
     *   object hierarchy.
     *   @param int $fid foreign id that should be used so that this document can be related (joined) on it later
@@ -897,7 +901,8 @@ class Document extends ORDataObject
         $tmpfile = null,
         $date_expires = null,
         $foreign_reference_id = null,
-        $foreign_reference_table = null
+        $foreign_reference_table = null,
+        $eid = "",
     ) {
         if (
             !empty($foreign_reference_id) && empty($foreign_reference_table)
@@ -905,6 +910,7 @@ class Document extends ORDataObject
         ) {
             return xl('Reference table and reference id must both be set');
         }
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
         $this->set_foreign_reference_id($foreign_reference_id);
         $this->set_foreign_reference_table($foreign_reference_table);
         // The original code used the encounter ID but never set it to anything.
@@ -912,10 +918,10 @@ class Document extends ORDataObject
         // and leave it empty. Logically, documents are not tied to encounters.
 
         // Create a crypto object that will be used for for encryption/decryption
-        $cryptoGen = new CryptoGen();
+        $cryptoGen = ServiceContainer::getCrypto();
 
-        if ($GLOBALS['generate_doc_thumb']) {
-            $thumb_size = ($GLOBALS['thumb_doc_max_size'] > 0) ? $GLOBALS['thumb_doc_max_size'] : null;
+        if (OEGlobalsBag::getInstance()->getBoolean('generate_doc_thumb')) {
+            $thumb_size = (OEGlobalsBag::getInstance()->get('thumb_doc_max_size') > 0) ? OEGlobalsBag::getInstance()->get('thumb_doc_max_size') : null;
             $thumbnail_class = new Thumbnail($thumb_size);
 
             $has_thumbnail = !is_null($tmpfile) ? $thumbnail_class->file_support_thumbnail($tmpfile) : false;
@@ -932,19 +938,19 @@ class Document extends ORDataObject
             $has_thumbnail = false;
         }
 
-        $encounter_id = '';
-        $this->storagemethod = $GLOBALS['document_storage_method'];
+        $encounter_id = $eid;
+        $this->storagemethod = OEGlobalsBag::getInstance()->get('document_storage_method');
         $this->mimetype = $mimetype;
         if ($this->storagemethod == self::STORAGE_METHOD_COUCHDB) {
             // Store it using CouchDB.
-            if ($GLOBALS['couchdb_encryption']) {
-                $document = $cryptoGen->encryptStandard($data, null, 'database');
+            if (OEGlobalsBag::getInstance()->getBoolean('couchdb_encryption')) {
+                $document = $cryptoGen->encryptStandard($data, keySource: KeySource::Database);
             } else {
                 $document = base64_encode($data);
             }
             if ($has_thumbnail) {
-                if ($GLOBALS['couchdb_encryption']) {
-                    $th_document = $cryptoGen->encryptStandard($thumbnail_data, null, 'database');
+                if (OEGlobalsBag::getInstance()->getBoolean('couchdb_encryption')) {
+                    $th_document = $cryptoGen->encryptStandard($thumbnail_data, keySource: KeySource::Database);
                 } else {
                     $th_document = base64_encode($thumbnail_data);
                 }
@@ -988,14 +994,15 @@ class Document extends ORDataObject
              * Else resume the local file storage
              */
 
-            if ($GLOBALS['documentStoredRemotely'] ?? '') {
+            if (OEGlobalsBag::getInstance()->get('documentStoredRemotely') ?? '') {
                 return xlt("Document was uploaded to remote storage"); // terminate processing
             }
 
             // Storing document files locally.
-            $repository = $GLOBALS['oer_config']['documents']['repository'];
+            $repository = OEGlobalsBag::getInstance()->get('oer_config')['documents']['repository'];
             $higher_level_path = preg_replace("/[^A-Za-z0-9\/]/", "_", $higher_level_path);
-            if ((!empty($higher_level_path)) && (is_numeric($patient_id) && $patient_id > 0)) {
+            $validPatientId = ValidationUtils::validateInt($patient_id, min: 1);
+            if ((!empty($higher_level_path)) && $validPatientId !== false) {
                 // Allow higher level directory structure in documents directory and a patient is mapped.
                 $filepath = $repository . $higher_level_path . "/";
             } elseif (!empty($higher_level_path)) {
@@ -1003,7 +1010,7 @@ class Document extends ORDataObject
                 // (will create up to 10000 random directories and increment the path_depth by 1).
                 $filepath = $repository . $higher_level_path . '/' . random_int(1, 10000)  . '/';
                 ++$path_depth;
-            } elseif (!(is_numeric($patient_id)) || !($patient_id > 0)) {
+            } elseif ($validPatientId === false) {
                 // This is the default action except there is no patient mapping (when patient_id is 00 or direct)
                 // (will create up to 10000 random directories and set the path_depth to 2).
                 $filepath = $repository . $patient_id . '/' . random_int(1, 10000)  . '/';
@@ -1033,7 +1040,7 @@ class Document extends ORDataObject
             }
 
             // Store the file.
-            $storedData = $GLOBALS['drive_encryption'] ? $cryptoGen->encryptStandard($data, null, 'database') : $data;
+            $storedData = OEGlobalsBag::getInstance()->getBoolean('drive_encryption') ? $cryptoGen->encryptStandard($data, keySource: KeySource::Database) : $data;
             if (file_exists($filepath . $filenameUuid)) {
                 // this should never happen with current uuid mechanism
                 return xl('Failed since file already exists') . " $filepath$filenameUuid";
@@ -1045,13 +1052,13 @@ class Document extends ORDataObject
             if ($has_thumbnail) {
                 // Store the thumbnail.
                 $this->thumb_url = "file://" . $filepath . $this->get_thumb_name($filenameUuid);
-                if ($GLOBALS['drive_encryption']) {
-                    $storedThumbnailData = $cryptoGen->encryptStandard($thumbnail_data, null, 'database');
+                if (OEGlobalsBag::getInstance()->getBoolean('drive_encryption')) {
+                    $storedThumbnailData = $cryptoGen->encryptStandard($thumbnail_data, keySource: KeySource::Database);
                 } else {
                     $storedThumbnailData = $thumbnail_data;
                 }
                 if (file_exists($filepath . $this->get_thumb_name($filenameUuid))) {
-                    // this should never happend with current uuid mechanism
+                    // this should never happen with current uuid mechanism
                     return xl('Failed since file already exists') .  $filepath . $this->get_thumb_name($filenameUuid);
                 }
                 if (
@@ -1066,8 +1073,8 @@ class Document extends ORDataObject
         }
 
         if (
-            ($GLOBALS['drive_encryption'] && ($this->storagemethod != 1))
-            || ($GLOBALS['couchdb_encryption'] && ($this->storagemethod == 1))
+            (OEGlobalsBag::getInstance()->getBoolean('drive_encryption') && ($this->storagemethod != 1))
+            || (OEGlobalsBag::getInstance()->getBoolean('couchdb_encryption') && ($this->storagemethod == 1))
         ) {
             $this->set_encrypted(self::ENCRYPTED_ON);
         } else {
@@ -1080,8 +1087,9 @@ class Document extends ORDataObject
         $this->size  = strlen($data);
         $this->hash  = hash('sha3-512', $data);
         $this->type  = $this->type_array['file_url'];
-        $this->owner = $owner ?: $_SESSION['authUserID'] ?? null;
+        $this->owner = $owner ?: $session->get('authUserID');
         $this->date_expires = $date_expires;
+        $this->encounter_id = $encounter_id;
         $this->set_foreign_id($patient_id);
         $this->persist();
         $this->populate();
@@ -1149,8 +1157,8 @@ class Document extends ORDataObject
      */
     public function decrypt_content($data)
     {
-        $cryptoGen = new CryptoGen();
-        $decryptedData = $cryptoGen->decryptStandard($data, null, 'database');
+        $cryptoGen = ServiceContainer::getCrypto();
+        $decryptedData = $cryptoGen->decryptStandard($data, keySource: KeySource::Database);
         if ($decryptedData === false) {
             throw new RuntimeException("Failed to decrypt the data");
         }

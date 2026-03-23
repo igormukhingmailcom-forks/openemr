@@ -4,7 +4,7 @@
  * Clinical instructions form save.php
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Jacob T Paul <jacob@zhservices.com>
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2015 Z&H Consultancy Services Private Limited <sam@zhservices.com>
@@ -17,8 +17,11 @@ require_once("$srcdir/api.inc.php");
 require_once("$srcdir/forms.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
-if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
+
+if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 
@@ -32,7 +35,7 @@ $instruction = $_POST["instruction"];
 if ($id && $id != 0) {
     sqlStatement("UPDATE form_clinical_instructions SET instruction =? WHERE id = ?", [$instruction, $id]);
 } else {
-    $newid = sqlInsert("INSERT INTO form_clinical_instructions (pid,encounter,user,instruction) VALUES (?,?,?,?)", [$pid, $encounter, $_SESSION['authUser'], $instruction]);
+    $newid = sqlInsert("INSERT INTO form_clinical_instructions (pid,encounter,user,instruction) VALUES (?,?,?,?)", [$pid, $encounter, $session->get('authUser'), $instruction]);
     addForm($encounter, "Clinical Instructions", $newid, "clinical_instructions", $pid, $userauthorized);
 }
 

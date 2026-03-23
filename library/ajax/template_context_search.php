@@ -4,7 +4,7 @@
  * Ajax interface for custom template context.
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Jerry Padgett <sjpadgett@gmail.com>
  * @copyright Copyright (c) 2019 Jerry Padgett <sjpadgett@gmail.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -13,8 +13,10 @@
 require_once(__DIR__ . '/../../interface/globals.php');
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 
-if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"])) {
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
+if (!CsrfUtils::verifyCsrfToken($_GET["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 
@@ -48,7 +50,7 @@ $results = [];
 $r = sqlStatementNoLog($cq, [$eSearch]);
 
 while ($result = sqlFetchArray($r)) {
-    $results[] = array_map('text', $result);
+    $results[] = array_map(text(...), $result);
 }
 
 echo json_encode(['results' => $results]);

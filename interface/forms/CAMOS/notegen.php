@@ -4,7 +4,7 @@
  * CAMOS note generator.
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Mark Leeds <drleeds@gmail.com>
  * @author    Brady Miller <brady.g.miller@gmail.com>
  * @copyright Copyright (c) 2006-2009 Mark Leeds <drleeds@gmail.com>
@@ -17,8 +17,11 @@ require_once($depth . 'interface/globals.php');
 require_once("content_parser.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
 ?>
 <?php
 if (!($_POST['submit_pdf'] || $_POST['submit_html']) && ($_GET['pid'] && $_GET['encounter'])) {
@@ -32,7 +35,7 @@ if (!($_POST['submit_pdf'] || $_POST['submit_html']) && ($_GET['pid'] && $_GET['
 <body>
     <?php echo xlt('Choose print format for this encounter report.'); ?><br /><br />
 <form method=post name=choose_patients>
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 <input type='submit' name='submit_pdf' value='<?php echo xla('Print (PDF)'); ?>'>
 <input type='submit' name='submit_html' value='<?php echo xla('Print (HTML)'); ?>'>
 </form>
@@ -59,7 +62,7 @@ $(function () {
         <?php $datetimepicker_timepicker = false; ?>
         <?php $datetimepicker_showseconds = false; ?>
         <?php $datetimepicker_formatInput = false; ?>
-        <?php require($GLOBALS['srcdir'] . '/js/xl/jquery-datetimepicker-2-5-4.js.php'); ?>
+        <?php require(OEGlobalsBag::getInstance()->get('srcdir') . '/js/xl/jquery-datetimepicker-2-5-4.js.php'); ?>
         <?php // can add any additional javascript settings to datetimepicker here; need to prepend first setting with a comma ?>
     });
 });
@@ -70,7 +73,7 @@ $(function () {
 <body>
 
 <form method=post name=choose_patients>
-<input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
+<input type="hidden" name="csrf_token_form" value="<?php echo CsrfUtils::collectCsrfToken(session: $session); ?>" />
 
 <table>
 <tr><td>
@@ -107,7 +110,7 @@ title='<?php echo xla('yyyy-mm-dd last date of this event'); ?>' />
 }
 
 if ($_POST['submit_pdf'] || $_POST['submit_html'] || ($_GET['pid'] && $_GET['encounter'])) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
 
@@ -148,7 +151,7 @@ if ($_POST['submit_pdf'] || $_POST['submit_html'] || ($_GET['pid'] && $_GET['enc
      font-size: 130%;
     }
     </style>
-    <title><?php xl('Patient Notes', 'e'); ?></title>
+    <title><?php echo xl('Patient Notes'); ?></title>
     </head>
         <body>
     <div class='paddingdiv'>
@@ -245,7 +248,7 @@ if ($_POST['submit_pdf'] || $_POST['submit_html'] || ($_GET['pid'] && $_GET['enc
                     $user_id = $results['id'];
                 }
 
-                $path = $GLOBALS['fileroot'] . "/interface/forms/CAMOS";
+                $path = OEGlobalsBag::getInstance()->get('fileroot') . "/interface/forms/CAMOS";
                 if (file_exists($path . "/sig" . convert_safe_file_dir_name($user_id) . ".jpg")) {
                 //show the image here
                 }
@@ -363,7 +366,7 @@ if ($_POST['submit_pdf'] || $_POST['submit_html'] || ($_GET['pid'] && $_GET['enc
                         $user_id = $results['id'];
                 }
 
-                $path = $GLOBALS['fileroot'] . "/interface/forms/CAMOS";
+                $path = OEGlobalsBag::getInstance()->get('fileroot') . "/interface/forms/CAMOS";
                 if (file_exists($path . "/sig" . $user_id . ".jpg")) {
                         $pdf->ezImage($path . "/sig" . convert_safe_file_dir_name($user_id) . ".jpg", '', '72', '', 'left', '');
                 }

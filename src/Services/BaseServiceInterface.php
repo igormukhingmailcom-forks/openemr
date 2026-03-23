@@ -4,7 +4,7 @@
  * Base Service Interface
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Jerry Padgett <sjpadgett@gmail.com>
  * @author    Stephen Nielson <snielson@discoverandchange.com>
  * @copyright Copyright (c) 2020 Jerry Padgett <sjpadgett@gmail.com>
@@ -14,16 +14,15 @@
 
 namespace OpenEMR\Services;
 
-use OpenEMR\Validators\ProcessingResult;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 interface BaseServiceInterface
 {
-    public function getEventDispatcher(): EventDispatcher;
+    public function getEventDispatcher(): EventDispatcherInterface;
 
-    public function setEventDispatcher(EventDispatcher $dispatcher);
+    public function setEventDispatcher(EventDispatcherInterface $dispatcher);
 
     public function setSession(SessionInterface $session): void;
 

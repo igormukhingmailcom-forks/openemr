@@ -4,7 +4,7 @@
  * To be run by cron hourly, sending phone reminders
  *
  * @package OpenEMR
- * @link    http://www.open-emr.org
+ * @link    https://www.open-emr.org
  * @author  Brady Miller <brady.g.miller@gmail.com>
  * @author  Matthew Vita <matthewvita48@gmail.com>
  * @author  Jason 'Toolbox' Oettinger <jason@oettinger.email>
@@ -28,7 +28,8 @@ chdir($current_dir);
 require_once("../../interface/globals.php");
 require_once("$srcdir/maviq_phone_api.php");
 
-use OpenEMR\Common\Crypto\CryptoGen;
+use OpenEMR\BC\ServiceContainer;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Services\FacilityService;
 
 $facilityService = new FacilityService();
@@ -36,16 +37,16 @@ $facilityService = new FacilityService();
 $type = "Phone";
 $before_trigger_hours = 72; // 3 days is default
 //Get the values from Global
-$before_trigger_hours = $GLOBALS['phone_notification_hour'];
+$before_trigger_hours = OEGlobalsBag::getInstance()->getInt('phone_notification_hour');
 //set up the phone notification settings for external phone service
-$phone_url = $GLOBALS['phone_gateway_url'] ;
-$phone_id = $GLOBALS['phone_gateway_username'];
-$cryptoGen = new CryptoGen();
-$phone_token = $cryptoGen->decryptStandard($GLOBALS['phone_gateway_password']);
-$phone_time_range = $GLOBALS['phone_time_range'];
+$phone_url = OEGlobalsBag::getInstance()->get('phone_gateway_url') ;
+$phone_id = OEGlobalsBag::getInstance()->get('phone_gateway_username');
+$cryptoGen = ServiceContainer::getCrypto();
+$phone_token = $cryptoGen->decryptStandard(OEGlobalsBag::getInstance()->get('phone_gateway_password'));
+$phone_time_range = OEGlobalsBag::getInstance()->get('phone_time_range');
 
 //get the facility_id-message map
-$facilities = cron_getFacilitiesMap();
+$facilities = cron_getFacilitiesMap($facilityService);
 //print_r($facilities);
 $fac_phone_map = $facilities['phone_map'];
 $fac_msg_map = $facilities['msg_map'];
@@ -70,7 +71,7 @@ for ($p = 0; $p < count($db_patient); $p++) {
     $greeting = $fac_msg_map[$prow['pc_facility']];
     if ($greeting == null) {
             //Use the default when the message is not found
-            $greeting = $GLOBALS['phone_appt_message']['Default'];
+            $greeting = OEGlobalsBag::getInstance()->get('phone_appt_message')['Default'];
     }
 
     //Set up the parameters for the call
@@ -98,84 +99,19 @@ for ($p = 0; $p < count($db_patient); $p++) {
         $strMsg = "\n========================" . $type . " || " . date("Y-m-d H:i:s") . "=========================";
         $strMsg .= "\nPhone reminder sent successfully: {$prow['fname']} | {$prow['lname']} |	| {$prow['phone_home']} | {$appt_date} | {$appt_time} ";
         // insert entry in notification_log table
-        cron_InsertNotificationLogEntry($prow, $greeting, $phone_url);
+        cron_InsertNotificationLogEntryBatchcom($prow, $greeting, $phone_url);
 
     //update entry >> pc_sendalertsms='Yes'
         cron_updateentry($type, $prow['pid'], $prow['pc_eid']);
     }
 
     //echo $strMsg;
-    WriteLog($strMsg);
+    batchcom_WriteLog($strMsg);
 }
 
 sqlClose();
 
-////////////////////////////////////////////////////////////////////
-// Function:    cron_updateentry
-// Purpose: update status yes if alert send to patient
-////////////////////////////////////////////////////////////////////
-function cron_updateentry($type, $pid, $pc_eid): void
-{
-    $query = "update openemr_postcalendar_events set ";
-
-    // larry :: and here again same story - this time for sms pc_sendalertsms - no such field in the table
-    if ($type == 'SMS') {
-        $query .= " pc_sendalertsms='YES' ";
-    } elseif ($type == 'Email') {
-        $query .= " pc_sendalertemail='YES' ";
-        //Added by Yijin for phone reminder.. Uses the same field as SMS.
-    } elseif ($type == 'Phone') {
-        $query .= " pc_sendalertsms='YES' ";
-    }
-
-    $query .= " where pc_pid=? and pc_eid=? ";
-    //echo "<br />".$query;
-    $db_sql = (sqlStatement($query, [$pid, $pc_eid]));
-}
-
-////////////////////////////////////////////////////////////////////
-// Function:    cron_getPhoneAlertpatientData
-// Purpose: get patient data for send to alert
-////////////////////////////////////////////////////////////////////
-function cron_getPhoneAlertpatientData($type, $trigger_hours)
-{
-
-    //Added by Yijin 1/12/10 to handle phone reminders. Patient needs to have hipaa Voice flag set to yes and a home phone
-    if ($type == 'Phone') {
-        $ssql = " and pd.hipaa_voice='YES' and pd.phone_home<>''	and ope.pc_sendalertsms='NO' and ope.pc_apptstatus != '*' ";
-
-        $check_date = date("Y-m-d", mktime(date("H") + $trigger_hours, 0, 0, date("m"), date("d"), date("Y")));
-    }
-
-    $patient_field = "pd.pid,pd.title,pd.fname,pd.lname,pd.mname,pd.phone_cell,pd.email,pd.hipaa_allowsms,pd.hipaa_allowemail,pd.phone_home,pd.hipaa_voice,";
-    $ssql .= " and (ope.pc_eventDate=?)";
-
-    $query = "select $patient_field pd.pid,ope.pc_eid,ope.pc_pid,ope.pc_title,
-			ope.pc_hometext,ope.pc_eventDate,ope.pc_endDate,
-			ope.pc_duration,ope.pc_alldayevent,ope.pc_startTime,ope.pc_endTime,ope.pc_facility
-		from
-			openemr_postcalendar_events as ope ,patient_data as pd
-		where
-			ope.pc_pid=pd.pid $ssql
-		order by
-			ope.pc_eventDate,ope.pc_endDate,pd.pid";
-
-    $db_patient = (sqlStatement($query, [$check_date]));
-    $patient_array = [];
-    $cnt = 0;
-    while ($prow = sqlFetchArray($db_patient)) {
-        $patient_array[$cnt] = $prow;
-        $cnt++;
-    }
-
-    return $patient_array;
-}
-
-////////////////////////////////////////////////////////////////////
-// Function:    cron_InsertNotificationLogEntry
-// Purpose: insert log entry in table
-////////////////////////////////////////////////////////////////////
-function cron_InsertNotificationLogEntry($prow, $phone_msg, $phone_gateway): void
+function cron_InsertNotificationLogEntryBatchcom($prow, $phone_msg, $phone_gateway): void
 {
     $patient_info = $prow['title'] . " " . $prow['fname'] . " " . $prow['mname'] . " " . $prow['lname'] . "|||" . $prow['phone_home'];
 
@@ -186,13 +122,14 @@ function cron_InsertNotificationLogEntry($prow, $phone_msg, $phone_gateway): voi
     $db_loginsert = ( sqlStatement($sql_loginsert, [$prow['pid'], $prow['pc_eid'], $message, $patient_info, $phone_gateway, $prow['pc_eventDate'], $prow['pc_endDate'], $prow['pc_startTime'], $prow['pc_endTime'], date('Y-m-d H:i:s')]));
 }
 
-////////////////////////////////////////////////////////////////////
-// Function:    WriteLog
-// Purpose: written log into file
-////////////////////////////////////////////////////////////////////
-function WriteLog($data): void
+/**
+ * Write log into file.
+ *
+ * @param string $data
+ */
+function batchcom_WriteLog($data): void
 {
-    $log_file = $GLOBALS['phone_reminder_log_dir'];
+    $log_file = OEGlobalsBag::getInstance()->get('phone_reminder_log_dir');
 
     if ($log_file != null) {
         $filename = $log_file . "/" . "phone_reminder_cronlog_" . date("Ymd") . ".html";
@@ -207,31 +144,4 @@ function WriteLog($data): void
             fclose($fp);
         }
     }
-}
-////////////////////////////////////////////////////////////////////
-// Function:    cron_getFacilities
-// Purpose: get facilities data once and store in map
-////////////////////////////////////////////////////////////////////
-function cron_getFacilitiesMap()
-{
-    global $facilityService;
-    //get the facility_name-message map from Globals
-    $message_map = $GLOBALS['phone_appt_message'];
-    //create a new array to store facility_id to message map
-    $facility_msg_map = [];
-    $facility_phone_map = [];
-    //get facilities from the database
-
-    $facilities = $facilityService->getAllFacility();
-    foreach ($facilities as $prow) {
-        $facility_msg_map[$prow['id']] = $message_map[$prow['name']];
-        $facility_phone_map[$prow['id']] = $prow['phone'];
-    }
-
-    $facility_map = [
-        'msg_map' => $facility_msg_map,
-        'phone_map' => $facility_phone_map
-    ];
-
-    return $facility_map;
 }

@@ -2,7 +2,7 @@
 
 /**
  * Class to be called from Laminas Module Manager for reporting management actions.
- * Example is if the module is enabled, disabled or unregistered ect.
+ * Example is if the module is enabled, disabled or unregistered etc.
  *
  * The class is in the Laminas "Installer\Controller" namespace.
  * Currently, register isn't supported of which support should be a part of install.
@@ -31,7 +31,6 @@
 */
 
 use OpenEMR\Core\AbstractModuleActionListener;
-use OpenEMR\Modules\WenoModule\Services\ModuleService;
 
 /* Allows maintenance of background tasks depending on Module Manager action. */
 

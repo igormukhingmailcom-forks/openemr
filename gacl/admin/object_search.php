@@ -1,14 +1,14 @@
 <?php
+
 //First make sure user has access
 require_once("../../interface/globals.php");
 
+use OpenEMR\Common\Acl\AccessDeniedHelper;
 use OpenEMR\Common\Acl\AclMain;
-use OpenEMR\Common\Twig\TwigContainer;
 
 //ensure user has proper access
 if (!AclMain::aclCheckCore('admin', 'acl')) {
-    echo (new TwigContainer(null, $GLOBALS['kernel']))->getTwig()->render('core/unauthorized.html.twig', ['pageTitle' => xl("ACL Administration")]);
-    exit;
+    AccessDeniedHelper::denyWithTemplate("ACL check failed for admin/acl: ACL Administration", xl("ACL Administration"));
 }
 
 require_once('gacl_admin.inc.php');
@@ -35,8 +35,8 @@ switch ($_GET['action']) {
 
         if (count($exploded_value_search_str) > 1 OR count($exploded_name_search_str) > 1) {
             //Given a list, lets try to match all lines in it.
-            array_walk($exploded_value_search_str, 'array_walk_trim');
-            array_walk($exploded_name_search_str, 'array_walk_trim');
+            array_walk($exploded_value_search_str, array_walk_trim(...));
+            array_walk($exploded_name_search_str, array_walk_trim(...));
         } else {
             if ($value_search_str != '') {
                 $value_search_str .= '%';

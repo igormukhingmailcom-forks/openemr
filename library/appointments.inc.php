@@ -2,7 +2,7 @@
 
 /**
  *
- * RM - allow multple providers to have been chosen
+ * RM - allow multiple providers to have been chosen
  *
  *
  * Holds library functions (and hashes) used by the appointment reporting module
@@ -18,6 +18,7 @@
 require_once(__DIR__ . "/encounter_events.inc.php");
 require_once(__DIR__ . "/../interface/main/calendar/modules/PostCalendar/pnincludes/Date/Calc.php");
 
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Events\Appointments\AppointmentsFilterEvent;
 use OpenEMR\Events\BoundFilter;
 
@@ -143,7 +144,7 @@ function fetchEvents($from_date, $to_date, $where_param = null, $orderby_param =
 
         // Filter out appointments based on a custom module filter
         $apptFilterEvent = new AppointmentsFilterEvent(new BoundFilter());
-        $apptFilterEvent = $GLOBALS["kernel"]->getEventDispatcher()->dispatch($apptFilterEvent, AppointmentsFilterEvent::EVENT_HANDLE, 10);
+        OEGlobalsBag::getInstance()->getKernel()->getEventDispatcher()->dispatch($apptFilterEvent, AppointmentsFilterEvent::EVENT_HANDLE);
         $boundFilter = $apptFilterEvent->getBoundFilter();
         $sqlBindArray = array_merge($sqlBindArray, $boundFilter->getBoundValues());
         $where .= " AND " . $boundFilter->getFilterClause();
@@ -229,28 +230,28 @@ function fetchEvents($from_date, $to_date, $where_param = null, $orderby_param =
                 $exdate = $event_recurrspec['exdate'];
 
                 [$ny, $nm, $nd] = explode('-', (string) $event['pc_eventDate']);
-        //        $occurance = Date_Calc::dateFormat($nd,$nm,$ny,'%Y-%m-%d');
-                $occurance = $event['pc_eventDate'];
+        //        $occurrence = Date_Calc::dateFormat($nd,$nm,$ny,'%Y-%m-%d');
+                $occurrence = $event['pc_eventDate'];
 
-                while ($occurance < $from_date) {
-                    $occurance =& __increment($nd, $nm, $ny, $rfreq, $rtype);
-                    [$ny, $nm, $nd] = explode('-', (string) $occurance);
+                while ($occurrence < $from_date) {
+                    $occurrence =& __increment($nd, $nm, $ny, $rfreq, $rtype);
+                    [$ny, $nm, $nd] = explode('-', (string) $occurrence);
                 }
 
-                while ($occurance <= $stopDate) {
+                while ($occurrence <= $stopDate) {
                     $excluded = false;
                     if (isset($exdate)) {
                         foreach (explode(",", (string) $exdate) as $exception) {
-                            // occurrance format == yyyy-mm-dd
+                            // occurrence format == yyyy-mm-dd
                             // exception format == yyyymmdd
-                            if (preg_replace("/-/", "", (string) $occurance) == $exception) {
+                            if (preg_replace("/-/", "", (string) $occurrence) == $exception) {
                                 $excluded = true;
                             }
                         }
                     }
 
                     if ($excluded == false) {
-                        $event['pc_eventDate'] = $occurance;
+                        $event['pc_eventDate'] = $occurrence;
                         $event['pc_endDate'] = '0000-00-00';
                         $events2[] = $event;
                       //////
@@ -264,8 +265,8 @@ function fetchEvents($from_date, $to_date, $where_param = null, $orderby_param =
                       //////
                     }
 
-                    $occurance =& __increment($nd, $nm, $ny, $rfreq, $rtype);
-                    [$ny, $nm, $nd] = explode('-', (string) $occurance);
+                    $occurrence =& __increment($nd, $nm, $ny, $rfreq, $rtype);
+                    [$ny, $nm, $nd] = explode('-', (string) $occurrence);
                 }
                 break;
 
@@ -305,23 +306,23 @@ function fetchEvents($from_date, $to_date, $where_param = null, $orderby_param =
                     // (YYYY-mm)-dd
                     $dnum = $rnum;
                     do {
-                        $occurance = Date_Calc::NWeekdayOfMonth($dnum--, $rday, $nm, $ny, $format = "%Y-%m-%d");
-                    } while ($occurance === -1);
+                        $occurrence = Date_Calc::NWeekdayOfMonth($dnum--, $rday, $nm, $ny, $format = "%Y-%m-%d");
+                    } while ($occurrence === -1);
 
-                    if ($occurance >= $from_date && $occurance <= $stopDate) {
+                    if ($occurrence >= $from_date && $occurrence <= $stopDate) {
                         $excluded = false;
                         if (isset($exdate)) {
                             foreach (explode(",", (string) $exdate) as $exception) {
-                                // occurrance format == yyyy-mm-dd
+                                // occurrence format == yyyy-mm-dd
                                 // exception format == yyyymmdd
-                                if (preg_replace("/-/", "", $occurance) == $exception) {
+                                if (preg_replace("/-/", "", (string) $occurrence) == $exception) {
                                     $excluded = true;
                                 }
                             }
                         }
 
                         if ($excluded == false) {
-                            $event['pc_eventDate'] = $occurance;
+                            $event['pc_eventDate'] = $occurrence;
                             $event['pc_endDate'] = '0000-00-00';
                             $events2[] = $event;
                             //////
@@ -500,8 +501,8 @@ function fetchXPastAppts($pid2, $pastApptsNumber, $orderOfAppts = '1')
 // get the event slot size in seconds
 function getSlotSize()
 {
-    if (isset($GLOBALS['calendar_interval'])) {
-        return $GLOBALS['calendar_interval'] * 60;
+    if (OEGlobalsBag::getInstance()->has('calendar_interval')) {
+        return OEGlobalsBag::getInstance()->get('calendar_interval') * 60;
     }
 
     return 15 * 60;
@@ -553,7 +554,7 @@ function getAvailableSlots($from_date, $to_date, $provider_id = null, $facility_
                         // which prevents the next appointment time from being set
                         // for the $same_day assignment below, so this fix...
                         if ($appointments[$i]['pc_duration'] == 0) {
-                            $next_appointment_time = $GLOBALS['schedule_end'] . ":00";
+                            $next_appointment_time = OEGlobalsBag::getInstance()->getInt('schedule_end') . ":00";
                         } else {
                             $next_appointment_time = $appointments[$i]['pc_endTime'];
                         }
@@ -623,7 +624,7 @@ function sortAppointments(array $appointments, $orderBy = 'date')
 {
     global $appointment_sort_order;
     $appointment_sort_order = $orderBy;
-    usort($appointments, "compareAppointments");
+    usort($appointments, compareAppointments(...));
     return $appointments;
 }
 
@@ -746,7 +747,7 @@ function fetchAppointmentCategories()
 {
      $catSQL = " SELECT pc_catid as id, pc_catname as category "
             . " FROM openemr_postcalendar_categories WHERE pc_active=1 and pc_recurrtype=0 and pc_cattype=0";
-    if ($GLOBALS['enable_group_therapy']) {
+    if (OEGlobalsBag::getInstance()->getBoolean('enable_group_therapy')) {
         $catSQL .= " OR pc_cattype=3";
     }
 

@@ -13,7 +13,10 @@
 // Created by:  Avasiloaei Dorin
 // Modified by: Larry Lart
 ////////////////////////////////////////////////////////////////////
-class sms
+
+use OpenEMR\Core\OEGlobalsBag;
+
+class sms_tmb4 implements sms_interface
 {
     function __construct(public $username, public $password)
     {
@@ -105,6 +108,7 @@ class sms
     function _send_curl($request)
     {
         /* Initiate a cURL session */
+        $httpVerifySsl = (bool) (OEGlobalsBag::getInstance()->get('http_verify_ssl') ?? true);
         $ch = curl_init();
 
         /* Set cURL variables */
@@ -112,7 +116,7 @@ class sms
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $httpVerifySsl);
 
         /* Send the request through cURL */
         $response = curl_exec($ch);
@@ -147,7 +151,7 @@ class sms
         /* Connect to the TM4B server */
         $out = @fsockopen($host, $port, $errno, $errstr);
 
-        /* Make sure that the connection succeded */
+        /* Make sure that the connection succeeded */
         if ($out) {
             /* Send the request */
             fwrite($out, $http_header);

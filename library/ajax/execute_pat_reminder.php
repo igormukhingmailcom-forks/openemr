@@ -14,8 +14,11 @@ require_once(__DIR__ . "/../../interface/globals.php");
 require_once(__DIR__ . "/../reminders.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEGlobalsBag;
 
-if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
+$session = SessionWrapperFactory::getInstance()->getActiveSession();
+if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"], session: $session)) {
     CsrfUtils::csrfNotVerified();
 }
 
@@ -26,8 +29,8 @@ set_time_limit(0);
 // is increased, these cpu intensive reports will have less affect on the performance
 // of other server activities, albeit it may negatively impact the performance
 // of this report (note this is only applicable for linux).
-if (!empty($GLOBALS['pat_rem_clin_nice'])) {
-    proc_nice($GLOBALS['pat_rem_clin_nice']);
+if (!empty(OEGlobalsBag::getInstance()->get('pat_rem_clin_nice'))) {
+    proc_nice(OEGlobalsBag::getInstance()->get('pat_rem_clin_nice'));
 }
 
 //  Start a report, which will be stored in the report_results sql table..

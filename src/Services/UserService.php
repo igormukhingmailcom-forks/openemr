@@ -4,23 +4,33 @@
  * UserService
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Matthew Vita <matthewvita48@gmail.com>
  * @author    Victor Kofia <victor.kofia@gmail.com>
  * @author    Ken Chapple <ken@mi-squared.com>
  * @copyright Copyright (c) 2017 Matthew Vita <matthewvita48@gmail.com>
  * @copyright Copyright (c) 2017 Victor Kofia <victor.kofia@gmail.com>
  * @copyright Copyright (c) 2021 Ken Chapple <ken@mi-squared.com>
+ * @copyright Copyright (c) 2025 OpenCoreEMR Inc
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
 
 namespace OpenEMR\Services;
 
 use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Common\Database\TableTypes;
+use OpenEMR\Common\Database\Repository\User\UserRepository;
+use OpenEMR\Common\Utils\ArrayUtils;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Common\Uuid\UuidRegistry;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Services\Search\FhirSearchWhereClauseBuilder;
 use OpenEMR\Validators\ProcessingResult;
+use Webmozart\Assert\InvalidArgumentException;
 
+/**
+ * @phpstan-import-type UsersRow from TableTypes
+ */
 class UserService
 {
     private $_includeUsername;
@@ -29,6 +39,39 @@ class UserService
      * The name of the system user used for api requests.
      */
     const SYSTEM_USER_USERNAME = 'oe-system';
+
+    public const SEARCH_FIELDS = [
+        'id',
+        'title',
+        'fname',
+        'lname',
+        'mname',
+        'federaltaxid',
+        'federaldrugid',
+        'upin',
+        'facility_id',
+        'facility',
+        'npi',
+        'email',
+        'specialty',
+        'billname',
+        'url',
+        'assistant',
+        'organization',
+        'valedictory',
+        'street',
+        'streetb',
+        'city',
+        'state',
+        'zip',
+        'phone',
+        'fax',
+        'phonew1',
+        'phonecell',
+        'notes',
+        'state_license_number',
+        'username',
+    ];
 
     /**
      * Default constructor.
@@ -78,20 +121,30 @@ class UserService
     }
 
     /**
-     * @return array hydrated user object
+     * @deprecated Use UserRepository::find() instead
+     * @see UserRepository::find()
+     *
+     * @param int|string $userId
+     * @return UsersRow|false
      */
     public function getUser($userId)
     {
         // TODO: look at deserializing uuid with createResultRecordFromDatabaseResult here
+        /** @var UsersRow|false $record */
         $record = sqlQuery("SELECT * FROM `users` WHERE `id` = ?", [$userId]);
         return $this->createResultRecordFromDatabaseResult($record);
     }
 
     /**
-     * @return array hydrated user object
+     * @deprecated Use UserRepository::findOneByUsername() instead
+     * @see UserRepository::findOneByUsername()
+     *
+     * @param string $username
+     * @return UsersRow|false
      */
     public function getUserByUsername($username)
     {
+        /** @var UsersRow|false $record */
         $record = sqlQuery("SELECT * FROM `users` WHERE BINARY `username` = ?", [$username]);
         if (!empty($record)) {
             return $this->createResultRecordFromDatabaseResult($record);
@@ -100,8 +153,12 @@ class UserService
     }
 
     /**
-     * Retrieves the API System User if it exists, returns null if the user does not exist.
-     * @return array
+     * @deprecated Use UserRepository::findOneByUsername() instead
+     * @see UserRepository::findOneByUsername()
+     *
+     * Retrieves the API System User if it exists, returns false if the user does not exist.
+     *
+     * @return UsersRow|false
      */
     public function getSystemUser()
     {
@@ -117,31 +174,47 @@ class UserService
     }
 
     /**
-     * @return array active users (fully hydrated)
+     * @deprecated Use UserRepository::findActive() instead
+     * @see UserRepository::findActive()
+     *
+     * @return list<UsersRow>
      */
     public function getActiveUsers()
     {
+        /** @var list<UsersRow> $users */
         $users = [];
         $user = sqlStatement("SELECT * FROM `users` WHERE (`username` != '' AND `username` IS NOT NULL) AND `active` = 1 ORDER BY `lname` ASC, `fname` ASC, `mname` ASC");
         while ($row = sqlFetchArray($user)) {
             // TODO: look at deserializing uuid with createResultRecordFromDatabaseResult here
+            /** @var UsersRow $row */
             $users[] = $row;
         }
         return $users;
     }
 
     /**
-     * @return array
+     * @deprecated Use UserRepository::find($_SESSION['authUserID']) instead
+     * @see UserRepository::find()
+     *
+     * @return UsersRow|false
      */
     public function getCurrentlyLoggedInUser()
     {
+        $session = SessionWrapperFactory::getInstance()->getActiveSession();
         // TODO: look at deserializing uuid with createResultRecordFromDatabaseResult here
-        return sqlQuery("SELECT * FROM `users` WHERE `id` = ?", [$_SESSION['authUserID']]);
+        /** @var UsersRow|false $user */
+        $user = sqlQuery("SELECT * FROM `users` WHERE `id` = ?", [$session->get('authUserID')]);
+        return $user;
     }
 
     /**
-     * Returns a user by the given UUID.  Can take a byte string or a UUID in string format.
-     * @param $userId string
+     * @deprecated Use UserRepository::findOneByUuid() instead
+     * @see UserRepository::findOneByUuid()
+     *
+     * Returns a user by the given UUID. Can take a byte string or a UUID in string format.
+     *
+     * @param string $uuid
+     * @return UsersRow|false
      */
     public function getUserByUUID($uuid)
     {
@@ -149,6 +222,7 @@ class UserService
             $uuid = UuidRegistry::uuidToBytes($uuid);
         }
 
+        /** @var UsersRow|false $user */
         $user = sqlQuery("SELECT * FROM `users` WHERE `uuid` = ?", [$uuid]);
         // this is very annoying...
         if (!empty($user)) {
@@ -193,7 +267,7 @@ class UserService
         //(CHEMED) facility filter
         $param2 = "";
         if (!empty($facility)) {
-            if ($GLOBALS['restrict_user_facility']) {
+            if (OEGlobalsBag::getInstance()->getBoolean('restrict_user_facility')) {
                 $param2 = " AND (facility_id = ? OR  ? IN (select facility_id from users_facility where tablename = 'users' and table_id = id))";
                 $bind[] = $facility;
                 $bind[] = $facility;
@@ -218,7 +292,10 @@ class UserService
         return ($records ?? null);
     }
 
-    public function search($search, $isAndCondition = true)
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function search(array $search, bool $isAndCondition = true): ProcessingResult
     {
         $sql = "SELECT  id,
                         uuid,
@@ -349,6 +426,9 @@ class UserService
     }
 
     /**
+     * @deprecated Use UserRepository::getSingleScalarResultBy('id', ['username' => $username]) instead
+     * @see UserRepository::getSingleScalarResultBy
+     *
      * @return array id of User
      */
     public function getIdByUsername($username)
@@ -363,7 +443,12 @@ class UserService
 
     /**
      * Allows any mapping data conversion or other properties needed by a service to be returned.
-     * @param $row The record returned from the database
+     *
+     * @deprecated UserRepository::normalize() applied automatically at UserRepository::find* methods
+     * @see UserRepository::normalize
+     * @see UserRepository::findAll
+     *
+     * @param array $row The record returned from the database
      */
     protected function createResultRecordFromDatabaseResult($row)
     {

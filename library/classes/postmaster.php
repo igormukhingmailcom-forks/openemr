@@ -13,11 +13,11 @@
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
 
-use OpenEMR\Common\Crypto\CryptoGen;
-use PHPMailer\PHPMailer\PHPMailer;
-use OpenEMR\Common\Twig\TwigContainer;
-use OpenEMR\Common\Logging\SystemLogger;
+use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Common\Twig\TwigContainer;
+use OpenEMR\Core\OEGlobalsBag;
+use PHPMailer\PHPMailer\PHPMailer;
 
 class MyMailer extends PHPMailer
 {
@@ -45,16 +45,16 @@ class MyMailer extends PHPMailer
     public static function isConfigured(): bool
     {
         $requiredKeys = [];
-        if ($GLOBALS['EMAIL_METHOD'] === "SMTP") {
+        if (OEGlobalsBag::getInstance()->get('EMAIL_METHOD') === "SMTP") {
             $requiredKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE'];
-            if (!empty($GLOBALS['SMTP_Auth'])) {
+            if (!empty(OEGlobalsBag::getInstance()->get('SMTP_Auth'))) {
                 $requiredKeys[] = 'SMTP_USER';
                 $requiredKeys[] = 'SMTP_PASS';
             }
         }
 
         foreach ($requiredKeys as $key) {
-            if (empty($GLOBALS[$key])) {
+            if (empty(OEGlobalsBag::getInstance()->get($key))) {
                 return false;
             }
         }
@@ -79,8 +79,8 @@ class MyMailer extends PHPMailer
             $body = json_encode($templateData);
             QueryUtils::sqlInsert("INSERT into `email_queue` (`sender`, `recipient`, `subject`, `body`,  `template_name`, `datetime_queued`) VALUES (?, ?, ?, ?, ?, NOW())", [$sender, $recipient, $subject, $body, $template]);
             return true;
-        } catch (\Exception $e) {
-            (new SystemLogger())->errorLogCaller("Failed to add email to queue notification error " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        } catch (\Throwable $e) {
+            ServiceContainer::getLogger()->error("Failed to add email to queue notification error " . $e->getMessage(), ['exception' => $e]);
         }
         return false;
     }
@@ -125,7 +125,7 @@ class MyMailer extends PHPMailer
 
                 if ($emailMethodConfigured) {
                     try {
-                        $twigContainer = new TwigContainer(null, $GLOBALS['kernel']);
+                        $twigContainer = new TwigContainer(null, OEGlobalsBag::getInstance()->getKernel());
                         $twig = $twigContainer->getTwig();
                         if (!empty($ret['template_name'])) {
                             $templateData = json_decode((string) $ret['body'], true);
@@ -153,8 +153,8 @@ class MyMailer extends PHPMailer
                         } else {
                             $mail->smtpClose();
                         }
-                    } catch (\Exception $e) {
-                        (new SystemLogger())->errorLogCaller("Failed to generate email contents: " . $e->getMessage(), ['trace' => $e->getTraceAsString(), 'id' => $ret['id']]);
+                    } catch (\Throwable $e) {
+                        ServiceContainer::getLogger()->error("Failed to generate email contents: " . $e->getMessage(), ['exception' => $e, 'id' => $ret['id']]);
                         throw $e; // Ensure rollback in case of failure
                     }
                 } else {
@@ -164,10 +164,10 @@ class MyMailer extends PHPMailer
             }
             // Success so Commit transaction.
             QueryUtils::commitTransaction();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Failed so Rollback transaction.
             QueryUtils::rollbackTransaction();
-            (new SystemLogger())->errorLogCaller("Failed to send email" . ': ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            ServiceContainer::getLogger()->error("Failed to send email" . ': ' . $e->getMessage(), ['exception' => $e]);
             // So we can still send, reset previously set sent flag since failed to send email
             sqlStatement("UPDATE `email_queue` SET `sent` = 0, `datetime_sent` = null WHERE `id` = ?", [$ret['id']]);
             // set the error flag and message
@@ -182,19 +182,19 @@ class MyMailer extends PHPMailer
     {
         global $HTML_CHARSET;
         $this->CharSet = $HTML_CHARSET;
-        switch ($GLOBALS['EMAIL_METHOD']) {
+        switch (OEGlobalsBag::getInstance()->get('EMAIL_METHOD')) {
             case "PHPMAIL":
                 $this->Mailer = "mail";
                 break;
             case "SMTP":
                 $this->Mailer = "smtp";
-                $this->SMTPAuth = $GLOBALS['SMTP_Auth'];
-                $this->Host = $GLOBALS['SMTP_HOST'];
-                $this->Username = $GLOBALS['SMTP_USER'];
-                $cryptoGen = new CryptoGen();
-                $this->Password = $cryptoGen->decryptStandard($GLOBALS['SMTP_PASS']);
-                $this->Port = $GLOBALS['SMTP_PORT'];
-                $this->SMTPSecure = $GLOBALS['SMTP_SECURE'];
+                $this->SMTPAuth = OEGlobalsBag::getInstance()->get('SMTP_Auth');
+                $this->Host = OEGlobalsBag::getInstance()->get('SMTP_HOST');
+                $this->Username = OEGlobalsBag::getInstance()->get('SMTP_USER');
+                $cryptoGen = ServiceContainer::getCrypto();
+                $this->Password = $cryptoGen->decryptStandard(OEGlobalsBag::getInstance()->get('SMTP_PASS'));
+                $this->Port = OEGlobalsBag::getInstance()->getInt('SMTP_PORT');
+                $this->SMTPSecure = OEGlobalsBag::getInstance()->get('SMTP_SECURE');
                 break;
             case "SENDMAIL":
                 $this->Mailer = "sendmail";

@@ -4,7 +4,7 @@
  * Version Service Interface
  *
  * @package   OpenEMR
- * @link      http://www.open-emr.org
+ * @link      https://www.open-emr.org
  * @author    Matthew Vita <matthewvita48@gmail.com>
  * @copyright Copyright (c) 2017 Matthew Vita <matthewvita48@gmail.com>
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -20,7 +20,7 @@ interface VersionServiceInterface extends BaseServiceInterface
     public function fetch(): array;
 
     /**
-     * Return the compounded major, minor, patch and tag verions as a string
+     * Return the compounded major, minor, patch and tag versions as a string
      *
      * @var $includeTag bool Include the tag
      * @var $includeRealpatch bool Include the realpatch

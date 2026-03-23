@@ -1,51 +1,99 @@
 <?php
 
+/**
+ * @package   OpenEMR
+ *
+ * @link      https://www.open-emr.org
+ *
+ * @author    Michael A. Smith <michael@opencoreemr.com>
+ * @copyright Copyright (c) 2025-2026 OpenCoreEMR Inc
+ * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
+ */
+
 namespace OpenEMR\Core;
 
+use OpenEMR\Core\Traits\SingletonTrait;
 use Symfony\Component\HttpFoundation\ParameterBag;
-use Traversable;
 
-class OEGlobalsBag extends ParameterBag implements \IteratorAggregate, \Countable
+use function array_key_exists;
+
+/**
+ * Typed wrapper around $GLOBALS. Extends Symfony ParameterBag.
+ *
+ * Prefer typed getters over get() + cast:
+ *
+ * @see ParameterBag::getString()   getString(string $key, string $default = ''): string
+ * @see ParameterBag::getInt()      getInt(string $key, int $default = 0): int
+ * @see ParameterBag::getBoolean()  getBoolean(string $key, bool $default = false): bool
+ * @see ParameterBag::getAlpha()    getAlpha(string $key, string $default = ''): string — letters only
+ * @see ParameterBag::getAlnum()    getAlnum(string $key, string $default = ''): string — alphanumeric only
+ * @see ParameterBag::getDigits()   getDigits(string $key, string $default = ''): string — digits only
+ * @see ParameterBag::getEnum()     getEnum(string $key, string $class, ?BackedEnum $default = null): ?BackedEnum
+ *
+ * @final — not enforced at runtime because tests mock this class
+ */
+class OEGlobalsBag extends ParameterBag
 {
-    private static $instance = null;
+    use SingletonTrait;
 
-    public static function getInstance()
+    protected static function createInstance(): static
     {
-        if (self::$instance === null) {
-            self::$instance = new OEGlobalsBag();
-        }
-        return self::$instance;
-    }
-
-    public function __construct(array $parameters = [], private readonly bool $compatabilityMode = false)
-    {
-        parent::__construct($parameters);
+        return new self($GLOBALS);
     }
 
     public function set(string $key, mixed $value): void
     {
-        $this->parameters[$key] = $value;
-        if ($this->compatabilityMode) {
-            // In compatibility mode, also set the value in the global $_GLOBALS array
-            $GLOBALS[$key] = $value;
+        parent::set($key, $value);
+
+        // Push the value into GLOBALS for backwards compatibility. Eventually
+        // this should be removed.
+        $GLOBALS[$key] = $value;
+    }
+
+    public function get(string $key, mixed $default = null): mixed
+    {
+        // During the transition from $GLOBALS to OEGlobalsBag, legacy code may
+        // still write to or unset from $GLOBALS directly. For the singleton
+        // instance, use $GLOBALS as the sole source of truth.
+        if ($this === (self::$instances[static::class] ?? null)) {
+            return array_key_exists($key, $GLOBALS) ? $GLOBALS[$key] : $default;
         }
+
+        if (!parent::has($key) && array_key_exists($key, $GLOBALS)) {
+            return $GLOBALS[$key];
+        }
+
+        return parent::get($key, $default);
+    }
+
+    public function has(string $key): bool
+    {
+        if (parent::has($key)) {
+            return true;
+        }
+
+        return array_key_exists($key, $GLOBALS);
     }
 
     /**
-     * Returns an iterator for parameters.
+     * Check if the kernel is initialized and is the correct type
+     */
+    public function hasKernel(): bool
+    {
+        return $this->get('kernel') instanceof Kernel;
+    }
+
+    /**
+     * Get the OpenEMR Kernel instance
      *
-     * @return \ArrayIterator<string, mixed>
+     * @throws \RuntimeException if the kernel is not initialized
      */
-    public function getIterator(): \ArrayIterator
+    public function getKernel(): Kernel
     {
-        return new \ArrayIterator($this->parameters);
-    }
-
-    /**
-     * Returns the number of parameters.
-     */
-    public function count(): int
-    {
-        return \count($this->parameters);
+        $kernel = $this->get('kernel');
+        if (!$kernel instanceof Kernel) {
+            throw new \RuntimeException('OpenEMR Kernel not initialized');
+        }
+        return $kernel;
     }
 }
